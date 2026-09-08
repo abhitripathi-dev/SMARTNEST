@@ -1,0 +1,51 @@
+<svg width="128" height="128" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#0ea5e9" />
+      <stop offset="45%" stopColor="#06b6d4" />
+      <stop offset="100%" stopColor="#10b981" />
+    </linearGradient>
+    <linearGradient id="houseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#059669" />
+      <stop offset="100%" stopColor="#10b981" />
+    </linearGradient>
+    <linearGradient id="sPathGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#0284c7" />
+      <stop offset="100%" stopColor="#0369a1" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M 50 12 L 81 23 C 85 24.5 87 28 87 32.5 L 87 56 C 87 71 71 85.5 50 91.5 C 29 85.5 13 71 13 56 L 13 32.5 C 13 28 15 24.5 19 23 Z"
+    stroke="url(#shieldGrad)"
+    strokeWidth="7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    fill="none"
+  />
+  <path
+    d="M 28 47 L 50 30 L 72 47"
+    stroke="url(#houseGrad)"
+    strokeWidth="6.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    fill="none"
+  />
+  <circle cx="50" cy="46" r="3.6" fill="#38bdf8" />
+  <line
+    x1="50"
+    y1="49"
+    x2="50"
+    y2="58"
+    stroke="#38bdf8"
+    strokeWidth="4"
+    strokeLinecap="round"
+  />
+  <path
+    d="M 39 49 C 35 52 34 57 37 60 C 41 64 57 62 62 68 C 66 73 63 78 57 80 C 49 82 43 78 44 71"
+    stroke="url(#sPathGrad)"
+    strokeWidth="6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    fill="none"
+  />
+</svg>

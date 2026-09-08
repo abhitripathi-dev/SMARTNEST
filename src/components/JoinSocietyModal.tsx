@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Building2,
   CheckCircle2,
@@ -11,10 +11,13 @@ import {
   User,
   X,
   ArrowRight,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { dataStore } from '../lib/dataStore';
-import type { Role } from '../lib/supabase';
+import type { Role, Society, Flat } from '../lib/supabase';
 
 interface Props {
   isOpen: boolean;
@@ -23,102 +26,216 @@ interface Props {
 }
 
 export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
-  const { switchDemoRole } = useAuth();
-  const [societyCode, setSocietyCode] = useState('');
+  // Society lookup state
+  const [societiesList, setSocietiesList] = useState<Society[]>([]);
+  const [societyCodeInput, setSocietyCodeInput] = useState('');
+  const [selectedSociety, setSelectedSociety] = useState<Society | null>(null);
+  const [availableFlats, setAvailableFlats] = useState<Flat[]>([]);
+
+  // Resident Form state (all mandatory)
   const [fullName, setFullName] = useState('');
-  const [flatNumber, setFlatNumber] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phoneDigits, setPhoneDigits] = useState(''); // 10 numeric digits
   const [email, setEmail] = useState('');
-  const [type, setType] = useState<'owner' | 'tenant'>('owner');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedFlatId, setSelectedFlatId] = useState('');
+  const [customFlatNumber, setCustomFlatNumber] = useState('');
+  const [type, setType] = useState<'owner' | 'tenant'>('owner');
+
+  // UI state
   const [loading, setLoading] = useState(false);
+  const [verifyingSociety, setVerifyingSociety] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [joinedSuccess, setJoinedSuccess] = useState(false);
-  const [targetSocietyName, setTargetSocietyName] = useState('');
+  const [finalSocietyName, setFinalSocietyName] = useState('');
+  const [finalFlatNumber, setFinalFlatNumber] = useState('');
+
+  // Load available registered societies when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    dataStore.societies.list().then((list) => {
+      setSocietiesList(list);
+      if (list.length === 1 && !selectedSociety) {
+        setSelectedSociety(list[0]);
+        if (list[0].code) setSocietyCodeInput(list[0].code);
+      }
+    });
+  }, [isOpen, selectedSociety]);
+
+  // When selected society changes, load its flats
+  useEffect(() => {
+    if (!selectedSociety) {
+      setAvailableFlats([]);
+      return;
+    }
+    setError(null);
+    dataStore.flats.list().then((flats) => {
+      const filtered = flats.filter((f) => f.society_id === selectedSociety.id);
+      setAvailableFlats(filtered);
+    });
+  }, [selectedSociety]);
 
   if (!isOpen) return null;
 
-  const handleJoinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!societyCode.trim() || !fullName.trim() || !flatNumber.trim() || !phone.trim()) {
-      setError('Please fill in all required fields.');
+  // Handle society code verification
+  const handleVerifyCode = async (codeToVerify: string) => {
+    const code = codeToVerify.trim();
+    if (!code) {
+      setSelectedSociety(null);
       return;
     }
-    setLoading(true);
+    setVerifyingSociety(true);
     setError(null);
 
+    const found = await dataStore.societies.getByCodeOrName(code);
+    if (found) {
+      setSelectedSociety(found);
+    } else {
+      setSelectedSociety(null);
+      setError(`No society found with code "${code}". Please verify your code or select your society from the registered list.`);
+    }
+    setVerifyingSociety(false);
+  };
+
+  const handlePhoneChange = (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 10);
+    setPhoneDigits(clean);
+  };
+
+  const handleJoinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    // 1. Mandatory Society Check
+    if (!selectedSociety) {
+      setError('Please enter a valid Society Code or select a registered society from the list.');
+      return;
+    }
+
+    // 2. Mandatory Full Name Check
+    if (!fullName.trim() || fullName.trim().length < 2) {
+      setError('Please enter your full name (at least 2 characters).');
+      return;
+    }
+
+    // 3. Mandatory 10-Digit Mobile Check
+    if (!phoneDigits || phoneDigits.length !== 10) {
+      setError('Please enter a valid 10-digit Indian mobile number (+91).');
+      return;
+    }
+
+    // 4. Mandatory Email Check
+    const emailClean = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailClean || !emailRegex.test(emailClean)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    // 5. Mandatory Password Check
+    if (!password || password.length < 6) {
+      setError('Please create a secure password with at least 6 characters.');
+      return;
+    }
+
+    // 6. Mandatory Flat Selection Check
+    const effectiveFlat = customFlatNumber.trim().toUpperCase() ||
+      availableFlats.find((f) => f.id === selectedFlatId)?.flat_number;
+
+    if (!effectiveFlat) {
+      setError('Please select your flat or enter your flat number.');
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const codeClean = societyCode.trim().toUpperCase();
+      const fullPhone = `+91 ${phoneDigits}`;
+      const socId = selectedSociety.id;
 
-      // Check custom registered society first
-      const customRaw = localStorage.getItem('society_custom_registered');
-      let matchingSocietyId = 'e7b1a234-5678-4321-8765-abcdef123456';
-      let matchingSocietyName = 'SmartNest Community';
-
-      if (customRaw) {
-        try {
-          const custom = JSON.parse(customRaw);
-          if (custom.societyCode && custom.societyCode.toUpperCase() === codeClean) {
-            matchingSocietyId = custom.societyId;
-            matchingSocietyName = custom.society?.name || custom.societyName || 'SmartNest Community';
-          }
-        } catch {}
+      // Ensure flat exists in dataStore
+      let flatIdToLink = selectedFlatId;
+      if (!flatIdToLink) {
+        const flatRes = await dataStore.flats.create({
+          society_id: socId,
+          flat_number: effectiveFlat,
+          block: `${effectiveFlat.split('-')[0] || 'A'} Wing`,
+          floor: '1st Floor',
+          area: '1,350 sq ft',
+          status: 'occupied',
+        });
+        flatIdToLink = flatRes.data?.id || '';
       }
 
-      setTargetSocietyName(matchingSocietyName);
-
-      // Create flat if needed
-      const flatRes = await dataStore.flats.create({
-        flat_number: flatNumber.trim().toUpperCase(),
-        block: `${flatNumber.trim().split('-')[0] || 'A'} Wing`,
-        floor: '1st Floor',
-        area: '1,350 sq ft',
-        status: 'occupied',
-      });
-
-      // Create resident in database
+      // Create resident in dataStore
       const resId = `res-${Date.now().toString(36)}`;
       await dataStore.residents.create({
+        society_id: socId,
         full_name: fullName.trim(),
-        phone: phone.trim(),
-        email: email.trim() || null,
-        flat_id: flatRes.data?.id || null,
+        phone: fullPhone,
+        email: emailClean,
+        flat_id: flatIdToLink || null,
         type: type,
         status: 'active',
       });
 
-      // Set active session as Resident for this society
-      const residentProfile = {
+      // Create Member profile & Account
+      const newMember = {
         id: resId,
-        society_id: matchingSocietyId,
+        society_id: socId,
         full_name: `${fullName.trim()} (Resident)`,
-        phone: phone.trim(),
+        phone: fullPhone,
+        email: emailClean,
         role: 'resident' as Role,
+        permissions: ['complaints', 'facilities', 'bills'],
         avatar_color: 'violet',
         created_at: new Date().toISOString(),
       };
 
-      const residentSociety = {
-        id: matchingSocietyId,
-        name: matchingSocietyName,
-        address: 'Sector 54, Smart City',
-        created_by: 'admin',
+      const accounts = JSON.parse(localStorage.getItem('society_db_accounts') || '[]');
+      const newAccount = {
+        email: emailClean,
+        password: password,
+        societyId: socId,
+        societyCode: selectedSociety.code || selectedSociety.id.substring(0, 8).toUpperCase(),
+        profile: newMember,
+        society: selectedSociety,
+        role: 'resident',
         created_at: new Date().toISOString(),
       };
 
-      localStorage.setItem('society_demo_role', 'resident');
-      localStorage.setItem('society_active_id', matchingSocietyId);
-      localStorage.setItem('society_view_mode', 'portal');
+      localStorage.setItem('society_db_accounts', JSON.stringify([
+        newAccount,
+        ...accounts.filter((a: any) => a.email !== emailClean)
+      ]));
 
+      // Save active resident session
+      localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
+      localStorage.setItem('society_active_id', socId);
+      localStorage.setItem('society_view_mode', 'portal');
+      localStorage.removeItem('society_demo_role');
+
+      // Add to members list
+      const membersList = JSON.parse(localStorage.getItem('society_db_members') || '[]');
+      localStorage.setItem('society_db_members', JSON.stringify([newMember, ...membersList.filter((m: any) => m.id !== resId)]));
+
+      // Trigger reactive stores
+      window.dispatchEvent(new Event('society-auth-change'));
+      window.dispatchEvent(new Event('society-data-change'));
+
+      setFinalSocietyName(selectedSociety.name);
+      setFinalFlatNumber(effectiveFlat);
       setJoinedSuccess(true);
     } catch (err: any) {
-      setError(err?.message || 'Failed to join society. Please verify your Society Code.');
+      setError(err?.message || 'Failed to join society. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleEnterResidentPortal = () => {
+    window.dispatchEvent(new Event('society-auth-change'));
+    window.dispatchEvent(new Event('society-data-change'));
     onClose();
     onSuccess('resident');
   };
@@ -128,7 +245,7 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
       <div
         className="demo-modal"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 520, width: '92%', padding: '28px 32px' }}
+        style={{ maxWidth: 540, width: '92%', maxHeight: '92vh', overflowY: 'auto', padding: '28px 32px' }}
       >
         <button className="modal-close icon-button" onClick={onClose} aria-label="Close modal">
           <X size={18} />
@@ -138,71 +255,131 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
             <div
               style={{
-                width: 56,
-                height: 56,
+                width: 60,
+                height: 60,
                 borderRadius: '50%',
                 background: '#dcfce7',
                 color: '#16a34a',
                 display: 'grid',
                 placeItems: 'center',
-                margin: '0 auto 14px',
+                margin: '0 auto 16px',
               }}
             >
-              <CheckCircle2 size={34} />
+              <CheckCircle2 size={36} />
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 6px', color: 'var(--dark)' }}>
-              Welcome to {targetSocietyName}!
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 6px', color: 'var(--dark)' }}>
+              Welcome to {finalSocietyName}!
             </h2>
-            <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5, marginBottom: 24 }}>
-              You have been registered for Flat <strong>{flatNumber.toUpperCase()}</strong>. You can now view maintenance dues, book amenities, and raise requests.
+            <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+              Your account has been authenticated for Flat <strong>{finalFlatNumber}</strong>. You can now view your maintenance dues, book amenities, and raise maintenance tickets.
             </p>
+
+            <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, border: '1px solid #e2e8f0', textAlign: 'left', marginBottom: 20 }}>
+              <div style={{ fontSize: 13, marginBottom: 4 }}><strong>Login Email:</strong> {email}</div>
+              <div style={{ fontSize: 13, marginBottom: 4 }}><strong>Contact:</strong> +91 {phoneDigits}</div>
+              <div style={{ fontSize: 13 }}><strong>Society:</strong> {finalSocietyName}</div>
+            </div>
+
             <button
               type="button"
               onClick={handleEnterResidentPortal}
-              className="mygate-yellow-btn"
+              className="hero-btn-primary"
               style={{ width: '100%', justifyContent: 'center', padding: '12px 20px', fontSize: 15, fontWeight: 700 }}
             >
-              Enter Resident Portal <ArrowRight size={18} />
+              Launch Resident Portal <ArrowRight size={18} />
             </button>
           </div>
         ) : (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <div className="role-icon-box violet" style={{ width: 36, height: 36 }}>
-                <KeyRound size={20} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f5f3ff', color: '#7c3aed', display: 'grid', placeItems: 'center' }}>
+                <KeyRound size={22} />
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--dark)' }}>
-                  Join Your Society
+                  Join Your Housing Society
                 </h3>
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Enter your Society Code provided by your management committee
+                  Enter your society code or select your community to register as a resident
                 </span>
               </div>
             </div>
 
             {error && (
-              <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13, margin: '14px 0' }}>
-                {error}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13, margin: '14px 0' }}>
+                <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>{error}</span>
               </div>
             )}
 
             <form onSubmit={handleJoinSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-              <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Society Code * (e.g. SN-48291)</span>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <KeyRound size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter Code (e.g. SN-48291)"
-                    value={societyCode}
-                    onChange={(e) => setSocietyCode(e.target.value.toUpperCase())}
-                    style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14, fontWeight: 700, letterSpacing: '0.04em' }}
-                  />
-                </div>
-              </label>
+              {/* STEP 1: SOCIETY SELECTION / CODE */}
+              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>1. Society Code or Selection *</span>
+                    {societiesList.length > 0 && (
+                      <span style={{ fontSize: 11, color: '#0d9488', fontWeight: 600 }}>
+                        {societiesList.length} Society Available
+                      </span>
+                    )}
+                  </div>
 
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+                      <KeyRound size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Enter Code (e.g. SN-48291)"
+                        value={societyCodeInput}
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase();
+                          setSocietyCodeInput(val);
+                          handleVerifyCode(val);
+                        }}
+                        style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 8, border: selectedSociety ? '1.5px solid #0d9488' : '1px solid var(--line)', fontSize: 14, fontWeight: 700, letterSpacing: '0.04em' }}
+                      />
+                    </div>
+
+                    {societiesList.length > 0 && (
+                      <select
+                        value={selectedSociety?.id || ''}
+                        onChange={(e) => {
+                          const soc = societiesList.find((s) => s.id === e.target.value);
+                          if (soc) {
+                            setSelectedSociety(soc);
+                            setSocietyCodeInput(soc.code || soc.id.substring(0, 8).toUpperCase());
+                          }
+                        }}
+                        style={{ padding: '0 12px', borderRadius: 8, border: '1px solid var(--line)', background: '#fff', fontSize: 13, maxWidth: 180 }}
+                      >
+                        <option value="">— Or Select Society —</option>
+                        {societiesList.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {verifyingSociety && (
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>Verifying society code...</span>
+                  )}
+
+                  {selectedSociety && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, padding: '6px 10px', background: '#f0fdfa', borderRadius: 6, border: '1px solid #99f6e4', color: '#0f766e', fontSize: 12 }}>
+                      <CheckCircle2 size={14} style={{ color: '#0d9488' }} />
+                      <span>
+                        Verified: <strong>{selectedSociety.name}</strong> · {selectedSociety.address || 'Registered Community'}
+                      </span>
+                    </div>
+                  )}
+                </label>
+              </div>
+
+              {/* STEP 2: RESIDENT PERSONAL DETAILS (ALL MANDATORY) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 10 }}>
                 <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>Your Full Name *</span>
@@ -211,7 +388,7 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Pooja Iyer"
+                      placeholder="e.g. Pooja Sharma"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       style={{ width: '100%', padding: '9px 12px 9px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
@@ -220,43 +397,11 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
                 </label>
 
                 <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Flat Number *</span>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <Home size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. A-102"
-                      value={flatNumber}
-                      onChange={(e) => setFlatNumber(e.target.value)}
-                      style={{ width: '100%', padding: '9px 12px 9px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Phone / Mobile *</span>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <Phone size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
-                    <input
-                      type="tel"
-                      required
-                      placeholder="+91 98400 12345"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      style={{ width: '100%', padding: '9px 12px 9px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
-                    />
-                  </div>
-                </label>
-
-                <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Resident Type</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Resident Type *</span>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as 'owner' | 'tenant')}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
+                    style={{ width: '100%', height: 40, padding: '0 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14, background: '#fff' }}
                   >
                     <option value="owner">Home Owner</option>
                     <option value="tenant">Tenant</option>
@@ -264,37 +409,119 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
                 </label>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {/* STEP 3: PHONE (+91 PREFIX MANDATORY) & EMAIL */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 10 }}>
                 <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Email Address</span>
-                  <input
-                    type="email"
-                    placeholder="pooja@gmail.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
-                  />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Mobile Number (10 Digits) *</span>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ position: 'absolute', left: 10, fontSize: 13, fontWeight: 700, color: '#334155', background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>
+                      🇮🇳 +91
+                    </span>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="9876543210"
+                      value={phoneDigits}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px 9px 66px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14, fontWeight: 600 }}
+                    />
+                  </div>
                 </label>
 
                 <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Create Password</span>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
-                  />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Email Address *</span>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Mail size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
+                    <input
+                      type="email"
+                      required
+                      placeholder="pooja@gmail.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px 9px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
+                    />
+                  </div>
+                </label>
+              </div>
+
+              {/* STEP 4: FLAT SELECTION & PASSWORD */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Flat / Apartment *</span>
+                  {availableFlats.length > 0 ? (
+                    <select
+                      value={selectedFlatId}
+                      onChange={(e) => {
+                        setSelectedFlatId(e.target.value);
+                        if (e.target.value) setCustomFlatNumber('');
+                      }}
+                      style={{ width: '100%', height: 40, padding: '0 10px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 13, background: '#fff' }}
+                    >
+                      <option value="">— Select Flat Unit —</option>
+                      {availableFlats.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.flat_number} ({f.block || 'Main Wing'})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <Home size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. A-102"
+                        value={customFlatNumber}
+                        onChange={(e) => setCustomFlatNumber(e.target.value)}
+                        style={{ width: '100%', padding: '9px 12px 9px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
+                      />
+                    </div>
+                  )}
+                </label>
+
+                <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Create Login Password *</span>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Lock size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Min 6 characters"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      style={{ width: '100%', padding: '9px 36px 9px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{ position: 'absolute', right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-2)' }}
+                    >
+                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
                 </label>
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
-                className="mygate-yellow-btn"
-                style={{ width: '100%', marginTop: 8, justifyContent: 'center', padding: '12px 20px', fontSize: 15, fontWeight: 700 }}
+                disabled={loading || !selectedSociety}
+                className="hero-btn-primary"
+                style={{
+                  width: '100%',
+                  marginTop: 6,
+                  justifyContent: 'center',
+                  padding: '12px 20px',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  opacity: (!selectedSociety || loading) ? 0.7 : 1,
+                }}
               >
-                {loading ? 'Joining Society...' : <>Join Society &amp; Launch Portal <ArrowRight size={18} /></>}
+                {loading ? 'Authenticating & Joining...' : (
+                  <>
+                    Join {selectedSociety?.name || 'Society'} &amp; Launch Portal <ArrowRight size={18} />
+                  </>
+                )}
               </button>
             </form>
           </div>

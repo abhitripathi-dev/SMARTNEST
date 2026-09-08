@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { dataStore } from '../lib/dataStore';
+import { SocietyLogo } from './SocietyLogo';
 import type { Role } from '../lib/supabase';
 
 interface Props {
@@ -46,7 +47,7 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
   // Step 2: Admin Info
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
-  const [adminPhone, setAdminPhone] = useState('');
+  const [adminPhoneDigits, setAdminPhoneDigits] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -67,8 +68,20 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
 
   const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!societyName.trim()) {
-      setError('Please enter your Society / Apartment Name');
+    if (!societyName.trim() || societyName.trim().length < 3) {
+      setError('Please enter a valid Society / Apartment Name (at least 3 characters).');
+      return;
+    }
+    if (!city.trim()) {
+      setError('Please enter your City / Region.');
+      return;
+    }
+    if (!address.trim() || address.trim().length < 4) {
+      setError('Please enter your Society Address / Area location.');
+      return;
+    }
+    if (!wingsInput.trim()) {
+      setError('Please specify at least one Wing / Tower name (e.g. A, B).');
       return;
     }
     setError(null);
@@ -77,18 +90,39 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
 
   const handleRegisterSociety = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminName || !adminEmail || !adminPassword) {
-      setError('Please fill in all required admin fields');
+    setError(null);
+
+    if (!adminName.trim() || adminName.trim().length < 2) {
+      setError('Please enter Admin Full Name.');
       return;
     }
+
+    const emailClean = adminEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailClean || !emailRegex.test(emailClean)) {
+      setError('Please enter a valid official Admin Email address.');
+      return;
+    }
+
+    if (!adminPhoneDigits || adminPhoneDigits.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number (+91).');
+      return;
+    }
+
+    if (!adminPassword || adminPassword.length < 6) {
+      setError('Please create a master admin password with at least 6 characters.');
+      return;
+    }
+
     setLoading(true);
-    setError(null);
 
     try {
       const wings = wingsInput
         .split(',')
         .map((w) => w.trim().toUpperCase())
         .filter(Boolean);
+
+      const fullPhone = `+91 ${adminPhoneDigits}`;
 
       const res = await registerNewSociety({
         societyName: societyName.trim(),
@@ -97,8 +131,8 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
         wings: wings.length > 0 ? wings : ['A', 'B'],
         flatsPerWing: Number(flatsPerWing) || 8,
         adminName: adminName.trim(),
-        adminEmail: adminEmail.trim().toLowerCase(),
-        adminPhone: adminPhone.trim(),
+        adminEmail: emailClean,
+        adminPhone: fullPhone,
         adminPassword: adminPassword,
       });
 
@@ -111,7 +145,7 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
       setCreatedCredentials({
         societyName: societyName.trim(),
         societyCode: res.credentials.societyCode,
-        adminEmail: adminEmail.trim().toLowerCase(),
+        adminEmail: emailClean,
         adminPassword: adminPassword,
         totalFlats: res.credentials.totalFlats,
       });
@@ -136,6 +170,8 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
   };
 
   const handleEnterDashboard = () => {
+    window.dispatchEvent(new Event('society-auth-change'));
+    window.dispatchEvent(new Event('society-data-change'));
     onClose();
     onSuccess('admin');
   };
@@ -153,12 +189,7 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
 
         {/* Brand Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div className="mygate-logo-icon" style={{ width: 28, height: 28 }}>
-            <span className="grid-square" />
-            <span className="grid-square" />
-            <span className="grid-square" />
-            <span className="grid-square" />
-          </div>
+          <SocietyLogo size={32} />
           <span style={{ fontWeight: 800, fontSize: 18, letterSpacing: '-0.02em', color: 'var(--dark)' }}>
             SmartNest <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--teal)', background: '#ccfbf1', padding: '2px 8px', borderRadius: 20 }}>ENTERPRISE ONBOARDING</span>
           </span>
@@ -361,7 +392,7 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Vikram Mehta"
+                  placeholder="e.g. Society Administrator"
                   value={adminName}
                   onChange={(e) => setAdminName(e.target.value)}
                   style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
@@ -386,16 +417,19 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
               </label>
 
               <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Phone / Mobile *</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Phone / Mobile (10 Digits) *</span>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <Phone size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
+                  <span style={{ position: 'absolute', left: 10, fontSize: 13, fontWeight: 700, color: '#334155', background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>
+                    🇮🇳 +91
+                  </span>
                   <input
                     type="tel"
                     required
-                    placeholder="+91 98200 12345"
-                    value={adminPhone}
-                    onChange={(e) => setAdminPhone(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
+                    maxLength={10}
+                    placeholder="9820012345"
+                    value={adminPhoneDigits}
+                    onChange={(e) => setAdminPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    style={{ width: '100%', padding: '10px 12px 10px 68px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14, fontWeight: 600 }}
                   />
                 </div>
               </label>

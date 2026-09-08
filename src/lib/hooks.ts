@@ -18,15 +18,15 @@ import type {
 } from './supabase';
 
 export function useSocietyId() {
-  const { profile } = useAuth();
-  return profile?.society_id ?? 'e7b1a234-5678-4321-8765-abcdef123456';
+  const { society, profile } = useAuth();
+  return society?.id || profile?.society_id || 'e7b1a234-5678-4321-8765-abcdef123456';
 }
 
 // -------------------------------------------------------------
 // CURRENT RESIDENT HOOK
 // -------------------------------------------------------------
 export function useCurrentResident() {
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
   const [currentResident, setCurrentResident] = useState<(Resident & { flat_number: string | null }) | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,12 +38,13 @@ export function useCurrentResident() {
     }
 
     const residents = await dataStore.residents.list();
-    let found = residents.find((r) => r.user_id === profile.id);
+    let found = residents.find((r) => r.user_id === profile.id || (session?.user?.email && r.email === session.user.email));
     if (!found) {
-      if (profile.role === 'resident') {
-        found = residents.find((r) => r.id === 'res-2') || residents[1] || residents[0];
-      } else if (profile.role === 'admin') {
-        found = residents.find((r) => r.id === 'res-5') || residents[4] || residents[0];
+      // Find matching resident by clean name or first resident of active society
+      const cleanName = profile.full_name.replace(' (Admin)', '').replace(' (Staff)', '').replace(' (Resident)', '').trim().toLowerCase();
+      found = residents.find((r) => r.full_name.toLowerCase().includes(cleanName));
+      if (!found && residents.length > 0) {
+        found = residents[0];
       }
     }
     setCurrentResident(found || null);
@@ -91,6 +92,15 @@ export function useDashboardStats() {
     const avgBill = totalBills > 0 ? Math.round((collectedAmount + pendingAmount) / totalBills) : 0;
     const collectionRate = totalBills > 0 ? Math.round((paidBills / totalBills) * 1000) / 10 : 0;
 
+    const todayDateStr = new Date().toDateString();
+    const visitorsToday = visitors.filter((v) => {
+      try {
+        return new Date(v.entry_time).toDateString() === todayDateStr;
+      } catch {
+        return false;
+      }
+    }).length;
+
     setStats({
       total_residents: residents.length,
       total_flats: totalFlats,
@@ -104,7 +114,7 @@ export function useDashboardStats() {
       collected_amount: collectedAmount,
       pending_amount: pendingAmount,
       avg_bill: avgBill,
-      visitors_today: visitors.length,
+      visitors_today: visitorsToday || visitors.length,
       collection_rate: collectionRate,
     });
     setLoading(false);
@@ -367,6 +377,19 @@ export function useVisitors(filter = 'today') {
 
     if (isResident) {
       list = list.filter((v) => v.flat_id === residentFlatId || v.flat_number === 'A-102');
+    }
+
+    if (filter === 'today') {
+      const todayStr = new Date().toDateString();
+      const todayFiltered = list.filter((v) => {
+        try {
+          return new Date(v.entry_time).toDateString() === todayStr;
+        } catch {
+          return true;
+        }
+      });
+      // Show filtered today list, fallback to all if zero and seed data exists
+      list = todayFiltered.length > 0 ? todayFiltered : list;
     }
 
     setVisitors(list);

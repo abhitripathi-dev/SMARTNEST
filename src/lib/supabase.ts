@@ -32,6 +32,7 @@ export type Society = {
   id: string;
   name: string;
   address: string | null;
+  code?: string | null;
   created_by: string | null;
   created_at: string;
 };
@@ -94,6 +95,7 @@ export type Visitor = {
   flat_id: string | null;
   phone?: string | null;
   purpose?: string | null;
+  photo_url?: string | null;
   entry_time: string;
   exit_time: string | null;
   created_at: string;
@@ -135,10 +137,12 @@ export type Notification = {
 
 export type SocietyMember = {
   id: string;
+  society_id?: string;
   full_name: string;
   phone: string | null;
   email: string | null;
   role: Role;
+  permissions?: string[];
   avatar_color: string;
   created_at: string;
 };

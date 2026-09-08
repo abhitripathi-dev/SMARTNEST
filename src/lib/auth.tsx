@@ -1,7 +1,18 @@
 import { createContext, useContext, useEffect, useState, type ReactNode, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, type Profile, type Society, type Role, type Flat } from './supabase';
-import { getLocal, setLocal } from './dataStore';
+import { supabase, isSupabaseConfigured, type Profile, type Society, type Role, type Flat, type SocietyMember } from './supabase';
+import { dataStore, getLocal, setLocal, DEMO_SOCIETY_ID } from './dataStore';
+
+type RegisteredAccount = {
+  email: string;
+  password?: string;
+  societyId: string;
+  societyCode: string;
+  profile: Profile;
+  society: Society;
+  role: Role;
+  created_at: string;
+};
 
 type AuthContextValue = {
   session: Session | null;
@@ -33,14 +44,12 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const DEMO_SOCIETY_ID = 'e7b1a234-5678-4321-8765-abcdef123456';
-
 const DEMO_PROFILES: Record<Role, { profile: Profile; society: Society }> = {
   admin: {
     profile: {
       id: 'usr-demo-admin-001',
       society_id: DEMO_SOCIETY_ID,
-      full_name: 'Vikram Mehta (Admin)',
+      full_name: 'Community Administrator',
       phone: '+91 98201 23456',
       role: 'admin',
       avatar_color: 'blue',
@@ -48,7 +57,7 @@ const DEMO_PROFILES: Record<Role, { profile: Profile; society: Society }> = {
     },
     society: {
       id: DEMO_SOCIETY_ID,
-      name: 'The Grand Heritage',
+      name: 'SmartNest Heights',
       address: 'Tower 4, Palm Avenue, Sector 54, Mumbai',
       created_by: 'usr-demo-admin-001',
       created_at: new Date().toISOString(),
@@ -58,7 +67,7 @@ const DEMO_PROFILES: Record<Role, { profile: Profile; society: Society }> = {
     profile: {
       id: 'usr-demo-staff-002',
       society_id: DEMO_SOCIETY_ID,
-      full_name: 'Rajesh Sharma (Staff)',
+      full_name: 'Security Gate Staff',
       phone: '+91 98302 34567',
       role: 'staff',
       avatar_color: 'teal',
@@ -66,7 +75,7 @@ const DEMO_PROFILES: Record<Role, { profile: Profile; society: Society }> = {
     },
     society: {
       id: DEMO_SOCIETY_ID,
-      name: 'The Grand Heritage',
+      name: 'SmartNest Heights',
       address: 'Tower 4, Palm Avenue, Sector 54, Mumbai',
       created_by: 'usr-demo-admin-001',
       created_at: new Date().toISOString(),
@@ -76,7 +85,7 @@ const DEMO_PROFILES: Record<Role, { profile: Profile; society: Society }> = {
     profile: {
       id: 'usr-demo-resident-003',
       society_id: DEMO_SOCIETY_ID,
-      full_name: 'Pooja Iyer (Resident)',
+      full_name: 'Resident Member',
       phone: '+91 98403 45678',
       role: 'resident',
       avatar_color: 'violet',
@@ -84,7 +93,7 @@ const DEMO_PROFILES: Record<Role, { profile: Profile; society: Society }> = {
     },
     society: {
       id: DEMO_SOCIETY_ID,
-      name: 'The Grand Heritage',
+      name: 'SmartNest Heights',
       address: 'Tower 4, Palm Avenue, Sector 54, Mumbai',
       created_by: 'usr-demo-admin-001',
       created_at: new Date().toISOString(),
@@ -100,6 +109,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = useCallback(async (userId: string) => {
     try {
+      // 1. Check custom registered / active society
+      const activeSocId = localStorage.getItem('society_active_id');
+      const accounts = getLocal<RegisteredAccount[]>('accounts', []);
+      const matchedAccount = accounts.find((a) => a.profile.id === userId || a.societyId === activeSocId);
+      if (matchedAccount) {
+        setProfile(matchedAccount.profile);
+        setSociety(matchedAccount.society);
+        return;
+      }
+
+      const customRaw = localStorage.getItem('society_custom_registered');
+      if (customRaw) {
+        const custom = JSON.parse(customRaw);
+        setProfile(custom.profile);
+        setSociety(custom.society);
+        return;
+      }
+
+      // 2. Try Supabase
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (prof) {
         setProfile(prof as Profile);
@@ -109,25 +137,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setSociety(null);
         }
-      } else {
-        // Check custom registered society
-        const customRaw = localStorage.getItem('society_custom_registered');
-        if (customRaw) {
-          const custom = JSON.parse(customRaw);
-          setProfile(custom.profile);
-          setSociety(custom.society);
-          return;
-        }
+        return;
+      }
 
-        // If logged in via demo session
-        const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
-        if (storedDemo && DEMO_PROFILES[storedDemo]) {
-          setProfile(DEMO_PROFILES[storedDemo].profile);
-          setSociety(DEMO_PROFILES[storedDemo].society);
-        } else {
-          setProfile(null);
-          setSociety(null);
-        }
+      // 3. Demo fallback
+      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
+      if (storedDemo && DEMO_PROFILES[storedDemo]) {
+        setProfile(DEMO_PROFILES[storedDemo].profile);
+        setSociety(DEMO_PROFILES[storedDemo].society);
+      } else {
+        setProfile(null);
+        setSociety(null);
       }
     } catch {
       const customRaw = localStorage.getItem('society_custom_registered');
@@ -147,43 +167,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // 1. Check custom registered society first
-    const customRaw = localStorage.getItem('society_custom_registered');
-    if (customRaw) {
-      try {
-        const custom = JSON.parse(customRaw);
-        setProfile(custom.profile);
-        setSociety(custom.society);
+    const syncCurrentAuth = () => {
+      // 1. Check if user is logged into a custom registered society
+      const customRaw = localStorage.getItem('society_custom_registered');
+      if (customRaw) {
+        try {
+          const custom = JSON.parse(customRaw);
+          if (custom.profile && custom.society) {
+            setProfile(custom.profile);
+            setSociety(custom.society);
+            setSession({
+              user: { id: custom.profile.id, email: custom.email } as Session['user'],
+              access_token: 'custom-auth-token',
+              token_type: 'bearer',
+              expires_in: 86400,
+              refresh_token: 'custom-refresh-token',
+            } as Session);
+            localStorage.setItem('society_active_id', custom.societyId);
+            setLoading(false);
+            return true;
+          }
+        } catch {}
+      }
+
+      // 2. Check demo role
+      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
+      if (storedDemo && DEMO_PROFILES[storedDemo]) {
+        setProfile(DEMO_PROFILES[storedDemo].profile);
+        setSociety(DEMO_PROFILES[storedDemo].society);
         setSession({
-          user: { id: custom.profile.id, email: custom.email } as Session['user'],
-          access_token: 'custom-auth-token',
+          user: { id: DEMO_PROFILES[storedDemo].profile.id, email: `${storedDemo}@smartnest.community` } as Session['user'],
+          access_token: 'demo-token',
           token_type: 'bearer',
-          expires_in: 86400,
-          refresh_token: 'custom-refresh-token',
+          expires_in: 3600,
+          refresh_token: 'demo-refresh-token',
         } as Session);
         setLoading(false);
-        return;
-      } catch {
-        // Fallback
+        return true;
       }
-    }
 
-    // 2. Check demo role
-    const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
-    if (storedDemo && DEMO_PROFILES[storedDemo]) {
-      setProfile(DEMO_PROFILES[storedDemo].profile);
-      setSociety(DEMO_PROFILES[storedDemo].society);
-      setSession({
-        user: { id: DEMO_PROFILES[storedDemo].profile.id, email: `${storedDemo}@smartnest.community` } as Session['user'],
-        access_token: 'demo-token',
-        token_type: 'bearer',
-        expires_in: 3600,
-        refresh_token: 'demo-refresh-token',
-      } as Session);
-      setLoading(false);
-      return;
-    }
+      return false;
+    };
 
+    if (syncCurrentAuth()) return;
+
+    // 3. Supabase session check
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
       setSession(existingSession);
       if (existingSession?.user) {
@@ -209,7 +237,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => listener.subscription.unsubscribe();
+    const handleAuthChange = () => {
+      syncCurrentAuth();
+    };
+    window.addEventListener('society-auth-change', handleAuthChange);
+
+    return () => {
+      listener.subscription.unsubscribe();
+      window.removeEventListener('society-auth-change', handleAuthChange);
+    };
   }, [loadProfile]);
 
   const registerNewSociety = async (params: {
@@ -246,9 +282,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString(),
       };
 
-      // Generate Starter Flats across all wings
+      // Generate Starter Flats across all configured wings
       const generatedFlats: Flat[] = [];
-      params.wings.forEach((wing) => {
+      const cleanWings = params.wings.length > 0 ? params.wings : ['A', 'B'];
+      cleanWings.forEach((wing) => {
         for (let i = 1; i <= params.flatsPerWing; i++) {
           const floorNum = Math.ceil(i / 2);
           const flatNum = `${wing}-${floorNum}${i % 2 === 1 ? '01' : '02'}`;
@@ -259,41 +296,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             block: `${wing} Wing`,
             floor: `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor`,
             area: '1,350 sq ft',
-            status: 'vacant',
+            status: i === 1 && wing === cleanWings[0] ? 'occupied' : 'vacant',
             created_at: new Date().toISOString(),
           });
         }
       });
 
-      // Persist in local database store
-      const existingFlats = getLocal<Flat[]>('flats', []);
-      setLocal('flats', [...generatedFlats, ...existingFlats]);
-
-      // Save Custom Registered Society info in localStorage
-      const registrationPayload = {
+      // Initialize society in dataStore with fresh custom data
+      dataStore.initializeSociety(newSociety, newProfile, generatedFlats, {
+        name: params.adminName,
         email: params.adminEmail,
+        phone: params.adminPhone,
+      });
+
+      // Save to persistent accounts list
+      const accounts = getLocal<RegisteredAccount[]>('accounts', []);
+      const newAccount: RegisteredAccount = {
+        email: params.adminEmail.toLowerCase().trim(),
         password: params.adminPassword,
         societyId,
         societyCode,
         profile: newProfile,
         society: newSociety,
-        registered_at: new Date().toISOString(),
+        role: 'admin',
+        created_at: new Date().toISOString(),
       };
+      setLocal('accounts', [newAccount, ...accounts.filter((a) => a.email !== newAccount.email)]);
 
-      localStorage.setItem('society_custom_registered', JSON.stringify(registrationPayload));
+      // Save active registration payload
+      localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
       localStorage.setItem('society_active_id', societyId);
       localStorage.setItem('society_view_mode', 'portal');
+      localStorage.removeItem('society_demo_role');
 
-      // Attempt cloud sync to Supabase if reachable
+      // Sync with Supabase if reachable
       try {
         await supabase.from('societies').insert(newSociety);
         await supabase.from('profiles').insert(newProfile);
         if (generatedFlats.length > 0) {
           await supabase.from('flats').insert(generatedFlats);
         }
-      } catch {
-        // Fallback to local
-      }
+      } catch {}
 
       setProfile(newProfile);
       setSociety(newSociety);
@@ -319,52 +362,98 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanEmail = email.trim().toLowerCase();
+    // 1. Check registered accounts in dataStore
+    const accounts = getLocal<RegisteredAccount[]>('accounts', []);
+    const matchedAccount = accounts.find((a) => a.email.toLowerCase() === cleanEmail);
 
-    // Check custom registered account
-    const customRaw = localStorage.getItem('society_custom_registered');
-    if (customRaw) {
-      try {
-        const custom = JSON.parse(customRaw);
-        if (custom.email.toLowerCase() === cleanEmail) {
-          setProfile(custom.profile);
-          setSociety(custom.society);
-          setSession({
-            user: { id: custom.profile.id, email: custom.email } as Session['user'],
-            access_token: 'custom-auth-token',
-            token_type: 'bearer',
-            expires_in: 86400,
-            refresh_token: 'custom-refresh-token',
-          } as Session);
-          localStorage.setItem('society_active_id', custom.societyId);
-          localStorage.setItem('society_view_mode', 'portal');
-          setLoading(false);
-          return { error: null };
-        }
-      } catch {
-        // Continue
-      }
-    }
-
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        // Fallback for demo roles
-        const role: Role = cleanEmail.includes('staff') || cleanEmail.includes('guard') || cleanEmail.includes('security')
-          ? 'staff'
-          : cleanEmail.includes('resident') || cleanEmail.includes('user')
-          ? 'resident'
-          : 'admin';
-
-        switchDemoRole(role);
+    if (matchedAccount) {
+      if (matchedAccount.password === password) {
+        setProfile(matchedAccount.profile);
+        setSociety(matchedAccount.society);
+        setSession({
+          user: { id: matchedAccount.profile.id, email: matchedAccount.email } as Session['user'],
+          access_token: 'custom-auth-token',
+          token_type: 'bearer',
+          expires_in: 86400,
+          refresh_token: 'custom-refresh-token',
+        } as Session);
+        localStorage.setItem('society_active_id', matchedAccount.societyId);
+        localStorage.setItem('society_custom_registered', JSON.stringify(matchedAccount));
+        localStorage.setItem('society_view_mode', 'portal');
+        localStorage.removeItem('society_demo_role');
+        setLoading(false);
         return { error: null };
+      } else {
+        return { error: 'Incorrect password. Please verify your credentials.' };
       }
-      return { error: null };
-    } catch {
-      const role: Role = cleanEmail.includes('staff') ? 'staff' : cleanEmail.includes('resident') ? 'resident' : 'admin';
-      switchDemoRole(role);
-      return { error: null };
     }
+
+    // 2. Check staff/resident accounts created in society members
+    const members = getLocal<Array<SocietyMember & { password?: string }>>('members', []);
+    const matchedMember = members.find((m) => m.email && m.email.toLowerCase() === cleanEmail);
+    if (matchedMember) {
+      if (matchedMember.password && matchedMember.password === password) {
+        const targetSocietyId = matchedMember.society_id || DEMO_SOCIETY_ID;
+        const socList = await dataStore.societies.list();
+        const memberSoc = socList.find((s) => s.id === targetSocietyId) || {
+          id: targetSocietyId,
+          name: 'Residential Society',
+          address: 'India',
+          created_by: matchedMember.id,
+          created_at: matchedMember.created_at,
+        };
+
+        const memberProfile: Profile = {
+          id: matchedMember.id,
+          society_id: targetSocietyId,
+          full_name: matchedMember.full_name,
+          phone: matchedMember.phone || '+91 98000 00000',
+          role: matchedMember.role,
+          avatar_color: matchedMember.avatar_color || 'teal',
+          created_at: matchedMember.created_at,
+        };
+
+        const sessionAccount: RegisteredAccount = {
+          email: matchedMember.email!,
+          password: matchedMember.password,
+          societyId: targetSocietyId,
+          societyCode: (memberSoc as Society).code || (memberSoc.id ? memberSoc.id.substring(0, 8).toUpperCase() : 'SOC12345'),
+          profile: memberProfile,
+          society: memberSoc as Society,
+          role: matchedMember.role,
+          created_at: matchedMember.created_at,
+        };
+
+        setProfile(memberProfile);
+        setSociety(memberSoc as Society);
+        setSession({
+          user: { id: memberProfile.id, email: matchedMember.email } as Session['user'],
+          access_token: 'custom-auth-token',
+          token_type: 'bearer',
+          expires_in: 86400,
+          refresh_token: 'custom-refresh-token',
+        } as Session);
+        localStorage.setItem('society_active_id', targetSocietyId);
+        localStorage.setItem('society_custom_registered', JSON.stringify(sessionAccount));
+        localStorage.setItem('society_view_mode', 'portal');
+        localStorage.removeItem('society_demo_role');
+        setLoading(false);
+        return { error: null };
+      } else {
+        return { error: 'Incorrect password. Please verify your credentials.' };
+      }
+    }
+
+    // 3. Supabase cloud sign-in if connected
+    if (isSupabaseConfigured) {
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!error) return { error: null };
+      } catch {}
+    }
+
+    return { error: 'No registered account found with this email. Please register your society or join as a resident.' };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -375,40 +464,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         options: { data: { full_name: fullName } },
       });
       if (error) {
-        // Create local user profile and log them in
+        // Local signup fallback
+        const adminId = `usr-${Date.now()}`;
+        const newSociety: Society = {
+          id: `soc-${Date.now()}`,
+          name: `${fullName}'s Community`,
+          address: 'India',
+          created_by: adminId,
+          created_at: new Date().toISOString(),
+        };
         const newProfile: Profile = {
-          id: `usr-custom-${Date.now()}`,
-          society_id: DEMO_SOCIETY_ID,
-          full_name: fullName || 'SmartNest Member',
+          id: adminId,
+          society_id: newSociety.id,
+          full_name: `${fullName} (Admin)`,
           phone: '+91 98000 00000',
           role: 'admin',
           avatar_color: 'teal',
           created_at: new Date().toISOString(),
         };
-        const newSoc: Society = {
-          id: DEMO_SOCIETY_ID,
-          name: 'The Grand Heritage',
-          address: 'Tower 4, Palm Avenue, Sector 54, Mumbai',
-          created_by: newProfile.id,
+
+        const starterFlats: Flat[] = [
+          { id: `flat-a-101-${Date.now()}`, society_id: newSociety.id, flat_number: 'A-101', block: 'A Wing', floor: '1st Floor', area: '1,250 sq ft', status: 'occupied', created_at: new Date().toISOString() },
+          { id: `flat-a-102-${Date.now()}`, society_id: newSociety.id, flat_number: 'A-102', block: 'A Wing', floor: '1st Floor', area: '1,250 sq ft', status: 'vacant', created_at: new Date().toISOString() },
+        ];
+
+        dataStore.initializeSociety(newSociety, newProfile, starterFlats);
+
+        const newAccount: RegisteredAccount = {
+          email: email.toLowerCase().trim(),
+          password,
+          societyId: newSociety.id,
+          societyCode: `SN-${Math.floor(10000 + Math.random() * 90000)}`,
+          profile: newProfile,
+          society: newSociety,
+          role: 'admin',
           created_at: new Date().toISOString(),
         };
-        localStorage.setItem('society_demo_role', 'admin');
+
+        const accounts = getLocal<RegisteredAccount[]>('accounts', []);
+        setLocal('accounts', [newAccount, ...accounts]);
+        localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
+        localStorage.setItem('society_active_id', newSociety.id);
+        localStorage.setItem('society_view_mode', 'portal');
+
         setProfile(newProfile);
-        setSociety(newSoc);
+        setSociety(newSociety);
         setSession({
           user: { id: newProfile.id, email } as Session['user'],
-          access_token: 'demo-token',
+          access_token: 'custom-auth-token',
           token_type: 'bearer',
-          expires_in: 3600,
-          refresh_token: 'demo-refresh-token',
+          expires_in: 86400,
+          refresh_token: 'custom-refresh-token',
         } as Session);
         setLoading(false);
         return { error: null };
       }
       return { error: null };
     } catch {
-      switchDemoRole('admin');
-      return { error: null };
+      return { error: 'Registration failed. Please try again.' };
     }
   };
 
@@ -418,9 +531,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('society_active_id');
     try {
       await supabase.auth.signOut();
-    } catch {
-      // Ignored for demo sessions
-    }
+    } catch {}
     setSession(null);
     setProfile(null);
     setSociety(null);
@@ -431,6 +542,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = DEMO_PROFILES[role] || DEMO_PROFILES.admin;
     localStorage.setItem('society_demo_role', role);
     localStorage.setItem('society_active_id', DEMO_SOCIETY_ID);
+    localStorage.setItem('society_view_mode', 'portal');
     setProfile(data.profile);
     setSociety(data.society);
     setSession({
@@ -445,114 +557,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const createSociety = async (name: string, fullName: string, address?: string) => {
     if (!session?.user) return { error: 'Not authenticated' };
-
     try {
       const { data, error } = await supabase.rpc('create_society_and_assign', {
         society_name: name,
-        creator_full_name: fullName,
+        society_address: address ?? null,
+        user_full_name: fullName,
       });
-
-      if (error) {
-        const { data: newSoc, error: socErr } = await supabase.from('societies').insert({
-          name,
-          address: address || null,
-          created_by: session.user.id,
-        }).select('id').single();
-
-        if (socErr) return { error: socErr.message };
-
-        const { error: profErr } = await supabase.from('profiles').update({
-          society_id: newSoc.id,
-          role: 'admin',
-          full_name: fullName,
-        }).eq('id', session.user.id);
-
-        if (profErr) return { error: profErr.message };
-      }
-
-      if (address && data) {
-        await supabase.from('societies').update({ address }).eq('id', data);
-      }
-
+      if (error) return { error: error.message };
       await loadProfile(session.user.id);
       return { error: null };
-    } catch {
-      if (profile) {
-        const newSoc: Society = {
-          id: DEMO_SOCIETY_ID,
-          name,
-          address: address || null,
-          created_by: profile.id,
-          created_at: new Date().toISOString(),
-        };
-        setSociety(newSoc);
-        setProfile({ ...profile, full_name: fullName, society_id: newSoc.id, role: 'admin' });
-      }
-      return { error: null };
+    } catch (err: any) {
+      return { error: err.message };
     }
   };
 
   const joinSociety = async (societyId: string, role: 'resident' | 'staff') => {
     if (!session?.user) return { error: 'Not authenticated' };
-
     try {
       const { error } = await supabase.rpc('join_society', {
-        society_uuid: societyId,
-        user_role: role,
+        target_society_id: societyId,
+        target_role: role,
       });
-
-      if (error) {
-        const { error: profErr } = await supabase.from('profiles').update({
-          society_id: societyId,
-          role,
-        }).eq('id', session.user.id);
-
-        if (profErr) return { error: profErr.message };
-      }
-
+      if (error) return { error: error.message };
       await loadProfile(session.user.id);
       return { error: null };
-    } catch {
-      if (profile) {
-        setProfile({ ...profile, society_id: societyId, role });
-      }
-      return { error: null };
+    } catch (err: any) {
+      return { error: err.message };
     }
   };
 
   const updateProfile = async (updates: { full_name?: string; phone?: string | null; avatar_color?: string }) => {
     if (!profile) return { error: 'Not authenticated' };
+    const updatedProfile = { ...profile, ...updates };
+    setProfile(updatedProfile);
 
-    try {
-      const { error } = await supabase.from('profiles').update(updates).eq('id', profile.id);
-      if (error) return { error: error.message };
-      setProfile({ ...profile, ...updates });
-      return { error: null };
-    } catch {
-      setProfile({ ...profile, ...updates });
-      return { error: null };
+    const customRaw = localStorage.getItem('society_custom_registered');
+    if (customRaw) {
+      try {
+        const custom = JSON.parse(customRaw);
+        custom.profile = updatedProfile;
+        localStorage.setItem('society_custom_registered', JSON.stringify(custom));
+      } catch {}
     }
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('profiles').update(updates).eq('id', profile.id);
+      } catch {}
+    }
+
+    return { error: null };
   };
 
   const updateSociety = async (updates: { name?: string; address?: string | null }) => {
-    if (!society || profile?.role !== 'admin') return { error: 'Unauthorized or society not loaded' };
+    if (!society) return { error: 'Not authenticated' };
+    const updatedSociety = { ...society, ...updates };
+    setSociety(updatedSociety);
 
-    try {
-      const { error } = await supabase.from('societies').update(updates).eq('id', society.id);
-      if (error) return { error: error.message };
-      setSociety({ ...society, ...updates });
-      return { error: null };
-    } catch {
-      setSociety({ ...society, ...updates });
-      return { error: null };
+    const customRaw = localStorage.getItem('society_custom_registered');
+    if (customRaw) {
+      try {
+        const custom = JSON.parse(customRaw);
+        custom.society = updatedSociety;
+        localStorage.setItem('society_custom_registered', JSON.stringify(custom));
+      } catch {}
     }
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('societies').update(updates).eq('id', society.id);
+      } catch {}
+    }
+
+    return { error: null };
   };
 
   const refreshProfile = async () => {
-    if (session?.user) await loadProfile(session.user.id);
+    if (session?.user) {
+      await loadProfile(session.user.id);
+    }
   };
-
-  const needsOnboarding = !!session && !loading && !!profile && !profile.society_id;
 
   return (
     <AuthContext.Provider
@@ -561,7 +645,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         society,
         loading,
-        needsOnboarding,
+        needsOnboarding: !society,
         signIn,
         signUp,
         signOut,
@@ -581,28 +665,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
   return ctx;
 }
 
 export function usePermissions() {
   const { profile } = useAuth();
   const role = profile?.role ?? 'resident';
-
   return {
     role,
     isAdmin: role === 'admin',
     isStaff: role === 'staff',
     isResident: role === 'resident',
-    canManageFlats: role === 'admin',
-    canManageBills: role === 'admin' || role === 'staff',
-    canManageComplaints: true,
+    canManageSociety: role === 'admin',
+    canManageMembers: role === 'admin',
+    canManageBilling: role === 'admin',
+    canManageBills: role === 'admin',
+    canManageVisitors: role === 'admin' || role === 'staff',
+    canRecordVisitors: role === 'admin' || role === 'staff',
+    canUpdateComplaints: role === 'admin' || role === 'staff',
     canUpdateComplaintStatus: role === 'admin' || role === 'staff',
     canDeleteComplaints: role === 'admin',
-    canManageVisitors: role === 'admin' || role === 'staff',
-    canManageFacilities: role === 'admin',
     canBookFacilities: true,
-    canManageSocietySettings: role === 'admin',
-    canManageMembers: role === 'admin',
   };
 }

@@ -28,6 +28,10 @@ import {
   Search,
   Settings,
   Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Key,
+  Lock,
   Sparkles,
   TicketCheck,
   Users,
@@ -67,9 +71,11 @@ import {
 } from './lib/hooks';
 import { dataStore } from './lib/dataStore';
 import { SmartNestLandingPage } from './components/SmartNestLandingPage';
+import { SocietyLogo } from './components/SocietyLogo';
 import { NotificationDropdown } from './components/NotificationDropdown';
 import { ToastProvider, useToast } from './components/Toast';
 import { ConfirmModal } from './components/ConfirmModal';
+import { VisitorPhotoCapture } from './components/VisitorPhotoCapture';
 import type {
   Complaint,
   DashboardStats,
@@ -147,6 +153,23 @@ function formatTime(iso: string) {
   }
 }
 
+function formatVisitorDateTime(iso: string) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    if (isToday) {
+      return `Today, ${timeStr}`;
+    }
+    const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${dateStr}, ${timeStr}`;
+  } catch {
+    return iso;
+  }
+}
+
 function formatDate(iso: string) {
   try {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -209,10 +232,16 @@ function AppShell() {
   }, []);
 
   const handleEnterPortal = (role?: Role) => {
-    if (role) {
-      switchDemoRole(role);
-    } else if (!session) {
-      switchDemoRole('admin');
+    const hasCustom = localStorage.getItem('society_custom_registered');
+    if (!hasCustom) {
+      if (role) {
+        switchDemoRole(role);
+      } else if (!session) {
+        switchDemoRole('admin');
+      }
+    } else {
+      window.dispatchEvent(new Event('society-auth-change'));
+      window.dispatchEvent(new Event('society-data-change'));
     }
     localStorage.setItem('society_view_mode', 'portal');
     setShowLanding(false);
@@ -230,208 +259,89 @@ function AppShell() {
   // If user is on landing page or is logged out, show the SmartNest Landing page
   if (showLanding || !session) {
     return (
-      <>
-        <SmartNestLandingPage
-          onEnterPortal={handleEnterPortal}
-          onOpenLogin={() => {
-            // Handled inside landing page modal
-          }}
-        />
-        <FloatingQuickBar
-          isLanding={true}
-          currentRole={profile?.role || 'admin'}
-          onOpenLanding={handleShowLanding}
-          onSelectRole={(role) => {
-            handleEnterPortal(role);
-          }}
-        />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <div className="app-layout">
-        <Sidebar
-          activeView={view}
-          onNavigate={navigate}
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-
-        <div className="app-main">
-          <header className="app-header">
-            <div className="header-left">
-              <button
-                className="icon-button mobile-menu-btn"
-                onClick={() => setSidebarOpen(true)}
-                aria-label="Open navigation menu"
-              >
-                <Menu size={20} />
-              </button>
-              <div className="header-breadcrumbs">
-                <span className="crumb-root">Workspace</span>
-                <ChevronRight size={14} className="crumb-separator" />
-                <span className="crumb-current">
-                  {view === 'overview'
-                    ? 'Dashboard'
-                    : view.charAt(0).toUpperCase() + view.slice(1)}
-                </span>
-              </div>
-            </div>
-
-            <div className="header-right">
-              <button
-                className="landing-toggle-btn outline-button"
-                onClick={handleShowLanding}
-                title="View Public SmartNest Website"
-                style={{ fontSize: 13, gap: 6, display: 'flex', alignItems: 'center' }}
-              >
-                <Home size={15} /> SmartNest Site
-              </button>
-
-              <NotificationDropdown onNavigate={navigate} />
-
-              <div className="user-profile-badge">
-                <div className={`avatar ${profile?.avatar_color || 'blue'}`}>
-                  {getInitials(profile?.full_name || 'User')}
-                </div>
-                <div className="user-info hide-mobile">
-                  <span className="user-name">{profile?.full_name || 'User'}</span>
-                  <span className="user-role">{profile?.role || 'Admin'}</span>
-                </div>
-              </div>
-
-              <button
-                className="logout-header-btn"
-                onClick={() => {
-                  signOut();
-                  setShowLanding(true);
-                }}
-                title="Sign out from SmartNest"
-              >
-                <LogOut size={15} /> Logout
-              </button>
-            </div>
-          </header>
-
-          <main className={`page-content ${pageLoading ? 'page-loading' : ''}`}>
-            {pageLoading ? (
-              <LoadingState />
-            ) : (
-              <ManagementView view={view} onNavigate={navigate} />
-            )}
-          </main>
-        </div>
-      </div>
-
-      <FloatingQuickBar
-        isLanding={false}
-        currentRole={profile?.role || 'admin'}
-        onOpenLanding={handleShowLanding}
-        onSelectRole={(role) => {
-          switchDemoRole(role);
-          handleEnterPortal();
+      <SmartNestLandingPage
+        onEnterPortal={handleEnterPortal}
+        onOpenLogin={() => {
+          // Handled inside landing page modal
         }}
       />
-    </>
-  );
-}
-
-function FloatingQuickBar({
-  isLanding,
-  currentRole,
-  onOpenLanding,
-  onSelectRole,
-}: {
-  isLanding: boolean;
-  currentRole?: string;
-  onOpenLanding: () => void;
-  onSelectRole: (role: Role) => void;
-}) {
-  const [minimized, setMinimized] = useState(() => {
-    // If a custom society is registered, minimize demo bar by default
-    return !!localStorage.getItem('society_custom_registered');
-  });
-
-  if (minimized) {
-    return (
-      <button
-        className="floating-quick-bar-minimized"
-        onClick={() => setMinimized(false)}
-        title="Show Quick Role Switcher"
-        style={{
-          position: 'fixed',
-          bottom: 16,
-          right: 16,
-          zIndex: 9999,
-          background: 'rgba(15, 23, 42, 0.85)',
-          backdropFilter: 'blur(10px)',
-          color: '#ffffff',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: 30,
-          padding: '8px 14px',
-          fontSize: 12,
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
-        }}
-      >
-        <span>⚡ Quick Roles</span>
-      </button>
     );
   }
 
   return (
-    <aside className="floating-quick-bar" aria-label="Quick Mode Switcher">
-      <button
-        className={`floating-switch-btn ${isLanding ? 'active' : ''}`}
-        onClick={onOpenLanding}
-        title="View Full SmartNest Public Website"
-      >
-        <Home size={15} /> SmartNest Site
-      </button>
-      <button
-        className={`floating-switch-btn admin-btn ${!isLanding && currentRole === 'admin' ? 'active' : ''}`}
-        onClick={() => onSelectRole('admin')}
-        title="Switch to Society Admin ERP"
-      >
-        <Shield size={14} /> Admin Portal
-      </button>
-      <button
-        className={`floating-switch-btn resident-btn ${!isLanding && currentRole === 'resident' ? 'active' : ''}`}
-        onClick={() => onSelectRole('resident')}
-        title="Switch to Resident Portal"
-      >
-        <Users size={14} /> Resident Portal
-      </button>
-      <button
-        className={`floating-switch-btn staff-btn ${!isLanding && currentRole === 'staff' ? 'active' : ''}`}
-        onClick={() => onSelectRole('staff')}
-        title="Switch to Security Gate Portal"
-      >
-        <TicketCheck size={14} /> Security Gate
-      </button>
-      <button
-        className="floating-switch-close"
-        onClick={() => setMinimized(true)}
-        title="Minimize Quick Bar"
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: 'rgba(255, 255, 255, 0.6)',
-          padding: '4px 6px',
-          display: 'flex',
-          alignItems: 'center',
-          cursor: 'pointer',
-        }}
-      >
-        <X size={14} />
-      </button>
-    </aside>
+    <div className="app-layout">
+      <Sidebar
+        activeView={view}
+        onNavigate={navigate}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      <div className="app-main">
+        <header className="app-header">
+          <div className="header-left">
+            <button
+              className="icon-button mobile-menu-btn"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open navigation menu"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="header-breadcrumbs">
+              <span className="crumb-root">Workspace</span>
+              <ChevronRight size={14} className="crumb-separator" />
+              <span className="crumb-current">
+                {view === 'overview'
+                  ? 'Dashboard'
+                  : view.charAt(0).toUpperCase() + view.slice(1)}
+              </span>
+            </div>
+          </div>
+
+          <div className="header-right">
+            <button
+              className="landing-toggle-btn outline-button"
+              onClick={handleShowLanding}
+              title="View Public SmartNest Website"
+              style={{ fontSize: 13, gap: 6, display: 'flex', alignItems: 'center' }}
+            >
+              <Home size={15} /> SmartNest Site
+            </button>
+
+            <NotificationDropdown onNavigate={navigate} />
+
+            <div className="user-profile-badge">
+              <div className={`avatar ${profile?.avatar_color || 'blue'}`}>
+                {getInitials(profile?.full_name || 'User')}
+              </div>
+              <div className="user-info hide-mobile">
+                <span className="user-name">{profile?.full_name || 'User'}</span>
+                <span className="user-role">{profile?.role || 'Admin'}</span>
+              </div>
+            </div>
+
+            <button
+              className="logout-header-btn"
+              onClick={() => {
+                signOut();
+                setShowLanding(true);
+              }}
+              title="Sign out from SmartNest"
+            >
+              <LogOut size={15} /> Logout
+            </button>
+          </div>
+        </header>
+
+        <main className={`page-content ${pageLoading ? 'page-loading' : ''}`}>
+          {pageLoading ? (
+            <LoadingState />
+          ) : (
+            <ManagementView view={view} onNavigate={navigate} />
+          )}
+        </main>
+      </div>
+    </div>
   );
 }
 
@@ -489,11 +399,9 @@ function Sidebar({
       <div className={`sidebar-overlay ${isOpen ? 'show' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="brand-mark">
-            <Building2 size={17} />
-          </div>
+          <SocietyLogo size={28} />
           <span>
-            SOCIETY<span className="brand-dot">.</span>
+            SmartNest<span className="brand-dot">.</span>
           </span>
           <button className="sidebar-close icon-button" onClick={onClose} aria-label="Close sidebar">
             <X size={17} />
@@ -1330,7 +1238,7 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const { flats } = useFlats();
   const { success } = useToast();
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phoneDigits, setPhoneDigits] = useState('');
   const [email, setEmail] = useState('');
   const [flatId, setFlatId] = useState('');
   const [customFlat, setCustomFlat] = useState('');
@@ -1341,6 +1249,15 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) {
+      setError('Please enter resident full name.');
+      return;
+    }
+    if (!phoneDigits || phoneDigits.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number (+91).');
+      return;
+    }
+
     setBusy(true);
     setError(null);
 
@@ -1348,7 +1265,7 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
     if (!assignedFlatId && customFlat.trim()) {
       const createdFlat = await dataStore.flats.create({
-        flat_number: customFlat.trim(),
+        flat_number: customFlat.trim().toUpperCase(),
         block: `${customFlat.trim().split('-')[0] || 'A'} Wing`,
         floor: '1st Floor',
         area: '1,350 sq ft',
@@ -1359,10 +1276,12 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       }
     }
 
+    const fullPhone = `+91 ${phoneDigits}`;
+
     const res = await dataStore.residents.create({
-      full_name: name,
-      phone: phone || null,
-      email: email || null,
+      full_name: name.trim(),
+      phone: fullPhone,
+      email: email.trim() || null,
       flat_id: assignedFlatId || null,
       type,
       status,
@@ -1395,10 +1314,22 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
             <input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Aarav Sharma" />
           </label>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12 }}>
             <label className="auth-field">
               <span>Phone / Mobile *</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98200 12345" required />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: 8, fontSize: 12, fontWeight: 700, color: '#334155', background: '#e2e8f0', padding: '2px 5px', borderRadius: 4 }}>
+                  🇮🇳 +91
+                </span>
+                <input
+                  value={phoneDigits}
+                  onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9820012345"
+                  maxLength={10}
+                  required
+                  style={{ paddingLeft: 64, fontWeight: 600 }}
+                />
+              </div>
             </label>
             <label className="auth-field">
               <span>Email Address</span>
@@ -1470,7 +1401,7 @@ function EditResidentModal({
   const { flats } = useFlats();
   const { success } = useToast();
   const [name, setName] = useState(resident.full_name);
-  const [phone, setPhone] = useState(resident.phone ?? '');
+  const [phoneDigits, setPhoneDigits] = useState(resident.phone ? resident.phone.replace('+91', '').replace(/\D/g, '') : '');
   const [email, setEmail] = useState(resident.email ?? '');
   const [flatId, setFlatId] = useState(resident.flat_id ?? '');
   const [type, setType] = useState(resident.type);
@@ -1483,10 +1414,12 @@ function EditResidentModal({
     setBusy(true);
     setError(null);
 
+    const fullPhone = phoneDigits ? `+91 ${phoneDigits}` : null;
+
     const res = await dataStore.residents.update(resident.id, {
-      full_name: name,
-      phone: phone || null,
-      email: email || null,
+      full_name: name.trim(),
+      phone: fullPhone,
+      email: email.trim() || null,
       flat_id: flatId || null,
       type,
       status,
@@ -1502,8 +1435,6 @@ function EditResidentModal({
     setBusy(false);
   };
 
-
-
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="demo-modal" style={{ width: 'min(500px, 100%)' }} onClick={(e) => e.stopPropagation()}>
@@ -1514,14 +1445,25 @@ function EditResidentModal({
 
         <form onSubmit={submit} className="auth-form">
           <label className="auth-field">
-            <span>Full name</span>
+            <span>Full name *</span>
             <input value={name} onChange={(e) => setName(e.target.value)} required />
           </label>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12 }}>
             <label className="auth-field">
-              <span>Phone</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." />
+              <span>Phone / Mobile</span>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: 8, fontSize: 12, fontWeight: 700, color: '#334155', background: '#e2e8f0', padding: '2px 5px', borderRadius: 4 }}>
+                  🇮🇳 +91
+                </span>
+                <input
+                  value={phoneDigits}
+                  onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9820012345"
+                  maxLength={10}
+                  style={{ paddingLeft: 64, fontWeight: 600 }}
+                />
+              </div>
             </label>
             <label className="auth-field">
               <span>Email</span>
@@ -2677,28 +2619,32 @@ function VisitorsView() {
   const { profile } = useAuth();
   const { currentResident } = useCurrentResident();
   const permissions = usePermissions();
-  const { success } = useToast();
+  const { success, error: toastError } = useToast();
 
   const [visitorName, setVisitorName] = useState('');
   const [phone, setPhone] = useState('');
   const [flatId, setFlatId] = useState(isResident ? (currentResident?.flat_id ?? 'flat-102') : '');
   const [purpose, setPurpose] = useState('Guest');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [deleteVisitorData, setDeleteVisitorData] = useState<Visitor | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [previewVisitor, setPreviewVisitor] = useState<(Visitor & { flat_number: string | null }) | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
 
+    const formattedPhone = phone ? `+91 ${phone}` : null;
     const res = await dataStore.visitors.create({
       visitor_name: visitorName,
-      phone: phone || null,
+      phone: formattedPhone,
       flat_id: flatId || null,
       purpose,
+      photo_url: photoUrl,
     });
 
     if (res.error) {
@@ -2707,6 +2653,7 @@ function VisitorsView() {
       success(isResident ? 'Visitor pre-approved' : 'Visitor checked in', `${visitorName} registered.`);
       setVisitorName('');
       setPhone('');
+      setPhotoUrl(null);
       refresh();
     }
     setBusy(false);
@@ -2721,8 +2668,13 @@ function VisitorsView() {
   const handleDelete = async () => {
     if (!deleteVisitorData) return;
     setDeleteBusy(true);
-    success('Visitor record deleted', 'Gate log entry removed.');
-    refresh();
+    const { error } = await dataStore.visitors.delete(deleteVisitorData.id);
+    if (error) {
+      toastError('Failed to delete visitor', error);
+    } else {
+      success('Visitor record deleted', 'Gate log entry removed.');
+      refresh();
+    }
     setDeleteBusy(false);
     setDeleteVisitorData(null);
   };
@@ -2751,7 +2703,18 @@ function VisitorsView() {
 
           <label className="auth-field">
             <span>Contact Phone</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." />
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--line)', borderRadius: 'var(--radius-xs)', overflow: 'hidden', background: '#fff' }}>
+              <span style={{ padding: '0 10px', background: 'var(--bg-subtle, #f8fafc)', borderRight: '1px solid var(--line)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted, #475569)', userSelect: 'none' }}>
+                🇮🇳 +91
+              </span>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="9876543210"
+                maxLength={10}
+                style={{ border: 'none', borderRadius: 0, outline: 'none', flex: 1, padding: '8px 12px' }}
+              />
+            </div>
           </label>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -2781,6 +2744,9 @@ function VisitorsView() {
               </select>
             </label>
           </div>
+
+          {/* Visitor Photo Capture & Upload Section */}
+          <VisitorPhotoCapture photoUrl={photoUrl} onPhotoChange={setPhotoUrl} />
 
           {error && <div className="auth-error">{error}</div>}
 
@@ -2826,16 +2792,31 @@ function VisitorsView() {
         ) : (
           visitors.map((visitor) => (
             <div className="visitor-row" key={visitor.id}>
-              <div className="avatar blue">{getInitials(visitor.visitor_name)}</div>
+              {visitor.photo_url ? (
+                <div
+                  className="visitor-photo-avatar-wrap"
+                  onClick={() => setPreviewVisitor(visitor)}
+                  title="Click to view visitor photo"
+                >
+                  <img src={visitor.photo_url} alt={visitor.visitor_name} className="visitor-photo-avatar" />
+                </div>
+              ) : (
+                <div className="avatar blue">{getInitials(visitor.visitor_name)}</div>
+              )}
               <div style={{ flex: 1 }}>
-                <strong>{visitor.visitor_name}</strong>
+                <strong
+                  style={{ cursor: visitor.photo_url ? 'pointer' : 'default' }}
+                  onClick={() => visitor.photo_url && setPreviewVisitor(visitor)}
+                >
+                  {visitor.visitor_name}
+                </strong>
                 <small style={{ display: 'block', color: 'var(--muted-2)' }}>
                   Visiting Flat {visitor.flat_number ?? '—'} · {visitor.purpose || 'Guest'}
                 </small>
               </div>
               <span className="entry-time">
                 <i />
-                {visitor.exit_time ? `Out at ${formatTime(visitor.exit_time)}` : `In at ${formatTime(visitor.entry_time)}`}
+                {visitor.exit_time ? `Out · ${formatVisitorDateTime(visitor.exit_time)}` : `In · ${formatVisitorDateTime(visitor.entry_time)}`}
                 {permissions.canManageVisitors && !visitor.exit_time && (
                   <button
                     className="icon-button"
@@ -2871,6 +2852,63 @@ function VisitorsView() {
         onConfirm={handleDelete}
         onClose={() => setDeleteVisitorData(null)}
       />
+
+      {/* Visitor Photo Preview Modal */}
+      {previewVisitor && (
+        <div className="modal-backdrop" onClick={() => setPreviewVisitor(null)}>
+          <div className="demo-modal visitor-detail-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, width: '92%', padding: 24 }}>
+            <button className="modal-close icon-button" onClick={() => setPreviewVisitor(null)}>
+              <X size={18} />
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div className="avatar blue" style={{ width: 40, height: 40, borderRadius: 10 }}>
+                <TicketCheck size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--navy)' }}>{previewVisitor.visitor_name}</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted-2)' }}>
+                  Visiting Flat {previewVisitor.flat_number ?? '—'} · {previewVisitor.purpose || 'Guest'}
+                </p>
+              </div>
+            </div>
+
+            {previewVisitor.photo_url ? (
+              <div className="visitor-modal-img-container">
+                <img
+                  src={previewVisitor.photo_url}
+                  alt={previewVisitor.visitor_name}
+                  className="visitor-modal-full-img"
+                />
+              </div>
+            ) : (
+              <div style={{ padding: 36, textAlign: 'center', background: '#f8fafc', borderRadius: 12, color: 'var(--muted-2)' }}>
+                No photo recorded
+              </div>
+            )}
+
+            <div className="visitor-modal-meta-grid">
+              <div className="meta-card">
+                <span className="meta-label">Phone</span>
+                <span className="meta-val">{previewVisitor.phone || 'Not provided'}</span>
+              </div>
+              <div className="meta-card">
+                <span className="meta-label">Entry Time</span>
+                <span className="meta-val">{formatVisitorDateTime(previewVisitor.entry_time)}</span>
+              </div>
+              <div className="meta-card">
+                <span className="meta-label">Exit Status</span>
+                <span className="meta-val" style={{ color: previewVisitor.exit_time ? 'var(--muted)' : '#059669' }}>
+                  {previewVisitor.exit_time ? `Left · ${formatVisitorDateTime(previewVisitor.exit_time)}` : 'Inside Campus'}
+                </span>
+              </div>
+              <div className="meta-card">
+                <span className="meta-label">Pass ID</span>
+                <span className="meta-val" style={{ fontFamily: 'monospace' }}>{previewVisitor.id}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3441,6 +3479,33 @@ function SettingsView() {
 
   const [busy, setBusy] = useState(false);
 
+  // Add Member / Staff Modal State
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberPhone, setNewMemberPhone] = useState('');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberPassword, setNewMemberPassword] = useState('guard2026');
+  const [newMemberRole, setNewMemberRole] = useState<Role>('staff');
+  const [newMemberPerms, setNewMemberPerms] = useState<string[]>(['gate_entry', 'visitor_logs', 'deliveries', 'complaints']);
+
+  // Edit Permissions Modal State
+  const [editPermsModalOpen, setEditPermsModalOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<SocietyMember | null>(null);
+  const [activePerms, setActivePerms] = useState<string[]>([]);
+
+  // Delete Confirm State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<SocietyMember | null>(null);
+
+  const ALL_SYSTEM_PERMISSIONS = [
+    { id: 'gate_entry', label: '🛡️ Gate Entry & Visitor Check-In', desc: 'Allow security guards to check-in guests, cabs, and workers.' },
+    { id: 'visitor_logs', label: '📋 Visitor Logs & Vehicle Passes', desc: 'Inspect daily entry history and vehicle pass validation.' },
+    { id: 'deliveries', label: '📦 Courier & Parcel Desk', desc: 'Log delivery packages from Amazon/Flipkart and alert residents.' },
+    { id: 'complaints', label: '🔧 Complaints & Maintenance', desc: 'Assign work orders to technicians and mark complaints resolved.' },
+    { id: 'facilities', label: '🏊 Clubhouse & Amenity Slots', desc: 'View live amenity availability and monitor booking schedules.' },
+    { id: 'bills', label: '💳 Billing & Maintenance Dues', desc: 'Access resident invoice records and payment verification.' },
+  ];
+
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -3465,6 +3530,78 @@ function SettingsView() {
     refreshMembers();
   };
 
+  const handleCreateMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemberName.trim()) return;
+    setBusy(true);
+    try {
+      const email = newMemberEmail.trim() || `${newMemberRole}-${Date.now().toString(36)}@smartnest.community`;
+      await dataStore.members.create({
+        full_name: newMemberName.trim(),
+        phone: newMemberPhone.trim() || '+91 98000 00000',
+        email,
+        password: newMemberPassword.trim() || 'guard2026',
+        role: newMemberRole,
+        permissions: newMemberPerms,
+      });
+      success('Account Created', `${newMemberName} added as ${newMemberRole.toUpperCase()} with active app login.`);
+      setAddModalOpen(false);
+      setNewMemberName('');
+      setNewMemberPhone('');
+      setNewMemberEmail('');
+      setNewMemberPassword('guard2026');
+      refreshMembers();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not create member';
+      toastError('Error', msg);
+    }
+    setBusy(false);
+  };
+
+  const handleOpenEditPerms = (m: SocietyMember) => {
+    setSelectedMember(m);
+    const current = m.permissions && m.permissions.length > 0
+      ? m.permissions
+      : m.role === 'admin'
+      ? ['all', 'gate_entry', 'visitor_logs', 'deliveries', 'complaints', 'facilities', 'bills']
+      : m.role === 'staff'
+      ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
+      : ['complaints', 'facilities', 'bills'];
+    setActivePerms(current);
+    setEditPermsModalOpen(true);
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedMember) return;
+    setBusy(true);
+    await dataStore.members.updatePermissions(selectedMember.id, activePerms);
+    success('Permissions Saved', `Updated access permissions for ${selectedMember.full_name}.`);
+    setEditPermsModalOpen(false);
+    refreshMembers();
+    setBusy(false);
+  };
+
+  const togglePermission = (permId: string) => {
+    setActivePerms((prev) =>
+      prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
+    );
+  };
+
+  const toggleNewMemberPerm = (permId: string) => {
+    setNewMemberPerms((prev) =>
+      prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
+    );
+  };
+
+  const confirmDeleteMember = async () => {
+    if (!memberToDelete) return;
+    await dataStore.members.delete(memberToDelete.id);
+    success('Member Removed', `${memberToDelete.full_name} has been removed from the society.`);
+    setDeleteModalOpen(false);
+    setMemberToDelete(null);
+    refreshMembers();
+  };
+
   return (
     <div className="settings-grid animate-in">
       <div className="settings-nav">
@@ -3481,7 +3618,7 @@ function SettingsView() {
         {permissions.isAdmin && (
           <button className={tab === 'members' ? 'active' : ''} onClick={() => setTab('members')}>
             <Users size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-            Member Roles ({members.length})
+            Staff & Security Roles ({members.length})
           </button>
         )}
       </div>
@@ -3528,7 +3665,21 @@ function SettingsView() {
 
             <label className="auth-field">
               <span>Contact Phone</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." />
+              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--line)', borderRadius: 'var(--radius-xs)', overflow: 'hidden', background: '#fff' }}>
+                <span style={{ padding: '0 10px', background: 'var(--bg-subtle, #f8fafc)', borderRight: '1px solid var(--line)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted, #475569)', userSelect: 'none' }}>
+                  🇮🇳 +91
+                </span>
+                <input
+                  value={phone ? phone.replace('+91', '').replace(/\D/g, '') : ''}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setPhone(digits ? `+91 ${digits}` : '');
+                  }}
+                  placeholder="9876543210"
+                  maxLength={10}
+                  style={{ border: 'none', borderRadius: 0, outline: 'none', flex: 1, padding: '8px 12px' }}
+                />
+              </div>
             </label>
 
             <label className="auth-field">
@@ -3590,65 +3741,336 @@ function SettingsView() {
 
       {tab === 'members' && permissions.isAdmin && (
         <section className="panel table-panel">
-          <div className="panel-header">
+          <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <h2>Community Members & Roles</h2>
-              <p>Manage access permissions for registered users.</p>
+              <h2>Staff & Security Guard Access</h2>
+              <p>Assign permissions and create staff or gate security logins to run the app.</p>
             </div>
+            <button
+              className="primary-button"
+              onClick={() => setAddModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: '#0d9488', color: '#fff', borderRadius: 8, fontWeight: 600, border: 'none', cursor: 'pointer' }}
+            >
+              <Plus size={16} /> Add Staff / Security Guard
+            </button>
           </div>
 
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Member</th>
+                  <th>Member / Staff</th>
                   <th>Contact</th>
-                  <th>Current Role</th>
+                  <th>System Role</th>
                   <th>Assigned Permissions</th>
-                  <th style={{ textAlign: 'right' }}>Change Role</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {members.map((m) => (
-                  <tr key={m.id}>
-                    <td>
-                      <div className="table-person">
-                        <div className={`avatar ${m.avatar_color || 'blue'}`}>{getInitials(m.full_name)}</div>
-                        <div>
-                          <strong>{m.full_name}</strong>
-                          {m.email && <small style={{ display: 'block', color: 'var(--muted-2)' }}>{m.email}</small>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="muted-cell">{m.phone || '—'}</td>
-                    <td>
-                      <span className={`status-pill ${m.role === 'admin' ? 'active' : m.role === 'staff' ? 'pending' : 'slate'}`}>
-                        <i /> {m.role}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--muted)' }}>
-                      {m.role === 'admin' ? 'Full Access' : m.role === 'staff' ? 'Operations & Gate' : 'Resident Portal'}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <select
-                          value={m.role}
-                          onChange={(e) => handleRoleChange(m.id, e.target.value as Role)}
-                          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', fontSize: 12 }}
-                        >
-                          <option value="admin">Admin</option>
-                          <option value="staff">Staff</option>
-                          <option value="resident">Resident</option>
-                        </select>
-                      </div>
+                {members.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--muted)' }}>
+                      No staff members added yet. Click &quot;Add Staff / Security Guard&quot; to invite guards or committee members.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  members.map((m) => {
+                    const isSelf = m.id === profile?.id;
+                    const perms = m.permissions || (
+                      m.role === 'admin'
+                        ? ['all']
+                        : m.role === 'staff'
+                        ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
+                        : ['complaints', 'facilities', 'bills']
+                    );
+                    return (
+                      <tr key={m.id}>
+                        <td>
+                          <div className="table-person">
+                            <div className={`avatar ${m.avatar_color || 'blue'}`}>{getInitials(m.full_name)}</div>
+                            <div>
+                              <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {m.full_name}
+                                {isSelf && <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4 }}>You</span>}
+                              </strong>
+                              {m.email && <small style={{ display: 'block', color: 'var(--muted-2)' }}>{m.email}</small>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="muted-cell">{m.phone || '—'}</td>
+                        <td>
+                          <span className={`status-pill ${m.role === 'admin' ? 'active' : m.role === 'staff' ? 'pending' : 'slate'}`}>
+                            <i /> {m.role === 'staff' ? 'Security / Staff' : m.role === 'admin' ? 'Admin' : 'Resident'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 300 }}>
+                            {m.role === 'admin' ? (
+                              <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                                ⚡ Full ERP &amp; Gate Authority
+                              </span>
+                            ) : perms.length === 0 ? (
+                              <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>No operational permissions</span>
+                            ) : (
+                              perms.slice(0, 3).map((p) => (
+                                <span key={p} style={{ fontSize: 10, background: '#f1f5f9', color: '#334155', padding: '2px 6px', borderRadius: 4 }}>
+                                  {p.replace(/_/g, ' ')}
+                                </span>
+                              ))
+                            )}
+                            {perms.length > 3 && m.role !== 'admin' && (
+                              <span style={{ fontSize: 10, background: '#e2e8f0', color: '#475569', padding: '2px 5px', borderRadius: 4 }}>
+                                +{perms.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPerms(m)}
+                              title="Configure Granular Permissions"
+                              style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#ffffff', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                            >
+                              <ShieldCheck size={13} style={{ color: '#0d9488' }} /> Permissions
+                            </button>
+
+                            <select
+                              value={m.role}
+                              disabled={isSelf}
+                              onChange={(e) => handleRoleChange(m.id, e.target.value as Role)}
+                              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', fontSize: 12, opacity: isSelf ? 0.7 : 1 }}
+                            >
+                              <option value="admin">Admin</option>
+                              <option value="staff">Staff / Guard</option>
+                              <option value="resident">Resident</option>
+                            </select>
+
+                            {!isSelf && (
+                              <button
+                                type="button"
+                                onClick={() => { setMemberToDelete(m); setDeleteModalOpen(true); }}
+                                title="Remove User Access"
+                                style={{ padding: '5px', borderRadius: 6, border: 'none', background: '#fee2e2', color: '#dc2626', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </section>
       )}
+
+      {/* MODAL 1: ADD STAFF / SECURITY GUARD */}
+      {addModalOpen && (
+        <div className="modal-backdrop" onClick={() => setAddModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>Add Staff / Security Guard</h3>
+                <p>Create login credentials and operational permissions.</p>
+              </div>
+              <button className="icon-button" onClick={() => setAddModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <label className="auth-field">
+                <span>Staff / Guard Full Name</span>
+                <input
+                  required
+                  placeholder="e.g. Ramesh Kumar (Main Gate)"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                />
+              </label>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <label className="auth-field">
+                  <span>Contact Phone</span>
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--line)', borderRadius: 'var(--radius-xs)', overflow: 'hidden', background: '#fff' }}>
+                    <span style={{ padding: '0 8px', background: 'var(--bg-subtle, #f8fafc)', borderRight: '1px solid var(--line)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted, #475569)', userSelect: 'none' }}>
+                      🇮🇳 +91
+                    </span>
+                    <input
+                      placeholder="9876543210"
+                      value={newMemberPhone.replace('+91', '').replace(/\D/g, '')}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setNewMemberPhone(digits ? `+91 ${digits}` : '');
+                      }}
+                      maxLength={10}
+                      style={{ border: 'none', borderRadius: 0, outline: 'none', flex: 1, padding: '8px 10px' }}
+                    />
+                  </div>
+                </label>
+
+                <label className="auth-field">
+                  <span>Assigned Role</span>
+                  <select
+                    value={newMemberRole}
+                    onChange={(e) => setNewMemberRole(e.target.value as Role)}
+                    style={{ height: 42, padding: '0 12px', borderRadius: 8, border: '1px solid var(--line)', background: '#fff' }}
+                  >
+                    <option value="staff">Security Guard / Staff</option>
+                    <option value="admin">Society Admin</option>
+                    <option value="resident">Resident Member</option>
+                  </select>
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12 }}>
+                <label className="auth-field">
+                  <span>Login Email</span>
+                  <input
+                    type="email"
+                    placeholder="guard1@smartnest.community"
+                    value={newMemberEmail}
+                    onChange={(e) => setNewMemberEmail(e.target.value)}
+                  />
+                </label>
+
+                <label className="auth-field">
+                  <span>Login Password</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="guard2026"
+                    value={newMemberPassword}
+                    onChange={(e) => setNewMemberPassword(e.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)', display: 'block', marginBottom: 8 }}>
+                  Assign Operational Permissions
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto', paddingRight: 4 }}>
+                  {ALL_SYSTEM_PERMISSIONS.map((perm) => {
+                    const checked = newMemberPerms.includes(perm.id);
+                    return (
+                      <label
+                        key={perm.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 10,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: checked ? '1px solid #0d9488' : '1px solid #e2e8f0',
+                          background: checked ? '#f0fdfa' : '#f8fafc',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleNewMemberPerm(perm.id)}
+                          style={{ marginTop: 3, accentColor: '#0d9488' }}
+                        />
+                        <div>
+                          <strong style={{ fontSize: 13, display: 'block', color: '#0f172a' }}>{perm.label}</strong>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>{perm.desc}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button type="button" className="secondary-button" onClick={() => setAddModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-button" disabled={busy} style={{ background: '#0d9488' }}>
+                  {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+                  Create &amp; Authorize Account
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: EDIT GRANULAR PERMISSIONS */}
+      {editPermsModalOpen && selectedMember && (
+        <div className="modal-backdrop" onClick={() => setEditPermsModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>Manage Access Permissions</h3>
+                <p>Configure operational modules for {selectedMember.full_name}.</p>
+              </div>
+              <button className="icon-button" onClick={() => setEditPermsModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '14px 0' }}>
+              {ALL_SYSTEM_PERMISSIONS.map((perm) => {
+                const checked = activePerms.includes(perm.id);
+                return (
+                  <label
+                    key={perm.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: checked ? '1.5px solid #0d9488' : '1px solid #e2e8f0',
+                      background: checked ? '#f0fdfa' : '#ffffff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePermission(perm.id)}
+                      style={{ marginTop: 3, accentColor: '#0d9488' }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: 13, display: 'block', color: '#0f172a' }}>{perm.label}</strong>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>{perm.desc}</span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="secondary-button" onClick={() => setEditPermsModalOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary-button" onClick={handleSavePermissions} disabled={busy} style={{ background: '#0d9488' }}>
+                {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+                Save Permissions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE MODAL */}
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        title="Remove Member Access?"
+        description={`Are you sure you want to remove ${memberToDelete?.full_name}? They will no longer be able to log in to this society.`}
+        confirmLabel="Remove Member"
+        isDestructive={true}
+        onConfirm={confirmDeleteMember}
+        onClose={() => { setDeleteModalOpen(false); setMemberToDelete(null); }}
+      />
     </div>
   );
 }

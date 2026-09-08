@@ -104,7 +104,7 @@ export function AuthPage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. Vikram Mehta"
+                placeholder="e.g. Rajesh Sharma"
                 required
               />
             </label>
@@ -230,7 +230,7 @@ export function OnboardingPage() {
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Vikram Mehta"
+                  placeholder="e.g. Rajesh Sharma"
                   required
                 />
               </label>
