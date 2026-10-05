@@ -15,7 +15,7 @@ import type {
   SocietyMember,
   Visitor,
   VisitorChartPoint,
-} from './supabase';
+} from './types';
 
 export function useSocietyId() {
   const { society, profile } = useAuth();
@@ -53,7 +53,12 @@ export function useCurrentResident() {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'residents' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -231,7 +236,12 @@ export function useResidents(searchQuery = '', typeFilter = 'all', statusFilter 
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'residents' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -259,7 +269,12 @@ export function useFlats(statusFilter = 'all', blockFilter = 'all') {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'flats' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -303,7 +318,12 @@ export function useBills(statusFilter = 'all', page = 1, pageSize = 20) {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'bills' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -317,13 +337,13 @@ export function useBills(statusFilter = 'all', page = 1, pageSize = 20) {
 export function useComplaints(statusFilter: 'all' | 'open' | 'in_progress' | 'resolved' = 'all', priorityFilter = 'all') {
   const { profile } = useAuth();
   const { currentResident } = useCurrentResident();
-  const [complaints, setComplaints] = useState<(Complaint & { resident_name?: string; flat_number?: string })[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [counts, setCounts] = useState<ComplaintCounts>({ all: 0, open: 0, in_progress: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    let list = await dataStore.complaints.list();
+    let list: Complaint[] = await dataStore.complaints.list();
 
     const isResident = profile?.role === 'resident';
     const residentFlatId = currentResident?.flat_id || 'flat-102';
@@ -351,7 +371,12 @@ export function useComplaints(statusFilter: 'all' | 'open' | 'in_progress' | 're
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'complaints' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -398,7 +423,12 @@ export function useVisitors(filter = 'today') {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'visitors' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -432,7 +462,12 @@ export function useFacilities() {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'facilities' || customEvent.detail.entity === 'bookings' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -468,7 +503,12 @@ export function useNotifications() {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'notifications' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);
@@ -492,7 +532,12 @@ export function useSocietyMembers() {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ entity?: string }>;
+      if (!customEvent.detail?.entity || customEvent.detail.entity === 'members' || customEvent.detail.entity === 'all') {
+        refresh();
+      }
+    };
     window.addEventListener('society-data-change', handler);
     return () => window.removeEventListener('society-data-change', handler);
   }, [refresh]);

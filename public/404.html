@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SmartNest — Smart Society & Community Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Redirect GitHub Pages 404 to root
+      var path = window.location.pathname;
+      var repo = path.split('/')[1];
+      if (repo && repo.toLowerCase() === 'smartnest') {
+        window.location.replace('/smartnest/');
+      } else {
+        window.location.replace('./');
+      }
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to <a href="./">SmartNest</a>...</p>
+  </body>
+</html>

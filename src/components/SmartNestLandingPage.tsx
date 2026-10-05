@@ -16,6 +16,7 @@ import {
   Layers,
   Lock,
   Mail,
+  Menu,
   MessageSquare,
   Phone,
   PhoneCall,
@@ -42,7 +43,7 @@ import { dataStore } from '../lib/dataStore';
 import { SocietyRegistrationModal } from './SocietyRegistrationModal';
 import { JoinSocietyModal } from './JoinSocietyModal';
 import { SocietyLogo } from './SocietyLogo';
-import type { Role } from '../lib/supabase';
+import type { Role } from '../lib/types';
 
 export function SmartNestLandingPage({
   onEnterPortal,
@@ -52,6 +53,9 @@ export function SmartNestLandingPage({
   onOpenLogin?: () => void;
 }) {
   const { signIn, switchDemoRole } = useAuth();
+
+  // Mobile Menu Drawer State
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Active Showcase Tab
   const [showcaseTab, setShowcaseTab] = useState<'financial' | 'gate' | 'resident' | 'amenities' | 'helpdesk'>('financial');
@@ -77,7 +81,6 @@ export function SmartNestLandingPage({
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [joinModalOpen, setJoinModalOpen] = useState(false);
-  const [authTab, setAuthTab] = useState<'login' | 'signup' | 'demo'>('login');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -130,12 +133,6 @@ export function SmartNestLandingPage({
         },
       ]);
     }, 600);
-  };
-
-  const handleLaunchRole = (role: Role) => {
-    switchDemoRole(role);
-    setLoginModalOpen(false);
-    if (onEnterPortal) onEnterPortal(role);
   };
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
@@ -198,7 +195,7 @@ export function SmartNestLandingPage({
       <div className="smartnest-top-announcement">
         <div className="announcement-content">
           <span className="announcement-badge">NEW</span>
-          <span>Next-Generation Society ERP &amp; Gate Security Operating System</span>
+          <span>Next-Generation Smart Community &amp; Gate Security Platform</span>
           <button className="announcement-link-btn" onClick={() => setRegisterModalOpen(true)}>
             Register Society <ChevronRight size={14} />
           </button>
@@ -212,7 +209,7 @@ export function SmartNestLandingPage({
             <SocietyLogo size={36} />
             <div className="brand-title-wrap">
               <span className="brand-name">SmartNest</span>
-              <span className="brand-tag">SOCIETY ERP</span>
+              <span className="brand-tag">COMMUNITY PLATFORM</span>
             </div>
           </div>
 
@@ -263,8 +260,103 @@ export function SmartNestLandingPage({
             >
               Book a Live Demo
             </button>
+
+            {/* Mobile Hamburger Toggle */}
+            <button
+              className="smartnest-mobile-toggle icon-button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle navigation menu"
+            >
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="smartnest-mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
+            <div className="smartnest-mobile-drawer" onClick={(e) => e.stopPropagation()}>
+              <div className="mobile-drawer-header">
+                <div className="smartnest-brand">
+                  <SocietyLogo size={30} />
+                  <div className="brand-title-wrap">
+                    <span className="brand-name" style={{ fontSize: 18 }}>SmartNest</span>
+                    <span className="brand-tag">COMMUNITY PLATFORM</span>
+                  </div>
+                </div>
+                <button
+                  className="icon-button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-label="Close menu"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="mobile-drawer-links">
+                <button
+                  onClick={() => { scrollToSection('features'); setMobileMenuOpen(false); }}
+                  className="mobile-nav-link"
+                >
+                  Features &amp; Modules
+                </button>
+                <button
+                  onClick={() => { scrollToSection('showcase'); setMobileMenuOpen(false); }}
+                  className="mobile-nav-link"
+                >
+                  Live Platform Preview
+                </button>
+                <button
+                  onClick={() => { scrollToSection('resident-app'); setMobileMenuOpen(false); }}
+                  className="mobile-nav-link"
+                >
+                  Resident Portal &amp; App
+                </button>
+                <button
+                  onClick={() => { scrollToSection('pricing'); setMobileMenuOpen(false); }}
+                  className="mobile-nav-link"
+                >
+                  Pricing Calculator
+                </button>
+                <button
+                  onClick={() => { scrollToSection('demo-section'); setMobileMenuOpen(false); }}
+                  className="mobile-nav-link"
+                >
+                  Book Live Demo
+                </button>
+              </div>
+
+              <div className="mobile-drawer-actions">
+                <button
+                  className="smartnest-nav-btn primary-btn w-full"
+                  onClick={() => { setMobileMenuOpen(false); scrollToDemoForm(); }}
+                >
+                  <Sparkles size={16} /> Book a Live Demo
+                </button>
+                <button
+                  className="smartnest-nav-btn portal-btn w-full"
+                  onClick={() => { setMobileMenuOpen(false); setLoginModalOpen(true); }}
+                >
+                  <UserCheck size={16} /> Sign In to Portal
+                </button>
+                <div className="mobile-actions-split">
+                  <button
+                    className="smartnest-nav-btn secondary-btn"
+                    onClick={() => { setMobileMenuOpen(false); setJoinModalOpen(true); }}
+                  >
+                    <Key size={14} /> Join Society
+                  </button>
+                  <button
+                    className="smartnest-nav-btn secondary-btn"
+                    onClick={() => { setMobileMenuOpen(false); setRegisterModalOpen(true); }}
+                  >
+                    <Building2 size={14} /> Register
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* 3. HERO SECTION */}
@@ -273,41 +365,41 @@ export function SmartNestLandingPage({
         <div className="hero-glow-sphere bottom-right" />
 
         <div className="smartnest-hero-container">
-          <div className="hero-badge-pill">
+          <div className="hero-badge-pill animate-fade-in-down">
             <Sparkles size={14} className="sparkle-icon" />
             <span>Complete Housing Society Operating System</span>
           </div>
 
-          <h1 className="hero-main-title">
+          <h1 className="hero-main-title animate-fade-in-up">
             Your One-Stop solution for <br />
             <span className="hero-title-gradient">housing society management</span>
           </h1>
 
-          <p className="hero-lead-text">
+          <p className="hero-lead-text animate-fade-in-up-delay-1">
             Streamline gate security, automate maintenance billing, manage facility reservations,
             and delight residents with a modern, connected community experience.
           </p>
 
-          <div className="hero-cta-buttons">
+          <div className="hero-cta-buttons animate-fade-in-up-delay-2">
             <button className="hero-btn-primary" onClick={scrollToDemoForm}>
               <Sparkles size={18} /> Book a Live Demo
             </button>
             <button className="hero-btn-secondary" onClick={() => setRegisterModalOpen(true)}>
               <Building2 size={18} /> Register Your Society
             </button>
-            <button className="hero-btn-outline" onClick={() => scrollToSection('resident-app')}>
-              <Smartphone size={18} /> Explore Resident Portal
+            <button className="hero-btn-outline" onClick={() => { if (onEnterPortal) onEnterPortal('admin'); }}>
+              <Smartphone size={18} /> Explore Live Portal <ArrowRight size={16} />
             </button>
           </div>
 
           {/* 4. HIGH-TECH INTERACTIVE DASHBOARD SHOWCASE (Inspired by reference mockup) */}
-          <div id="showcase" className="showcase-container">
+          <div id="showcase" className="showcase-container animate-fade-in-up-delay-3">
             <div className="showcase-tab-bar">
               <button
                 className={`showcase-tab-btn ${showcaseTab === 'financial' ? 'active' : ''}`}
                 onClick={() => setShowcaseTab('financial')}
               >
-                <Wallet size={16} /> Financial &amp; ERP Dashboard
+                <Wallet size={16} /> Financial &amp; Billing Dashboard
               </button>
               <button
                 className={`showcase-tab-btn ${showcaseTab === 'gate' ? 'active' : ''}`}
@@ -347,9 +439,14 @@ export function SmartNestLandingPage({
                   <Lock size={12} style={{ color: '#10b981' }} />
                   <span>https://app.smartnest.community/society/dashboard</span>
                 </div>
-                <div className="window-status-badge">
-                  <span className="status-indicator live" /> LIVE PORTAL
-                </div>
+                <button
+                  className="window-status-badge"
+                  onClick={() => { if (onEnterPortal) onEnterPortal('admin'); }}
+                  style={{ cursor: 'pointer', border: 'none' }}
+                  title="Click to open interactive portal"
+                >
+                  <span className="status-indicator live" /> OPEN LIVE PORTAL ↗
+                </button>
               </div>
 
               {/* Dynamic Screen Content */}
@@ -721,7 +818,7 @@ export function SmartNestLandingPage({
             <div className="bento-icon-badge gold">
               <Wallet size={28} />
             </div>
-            <h3>Automated Society ERP &amp; Maintenance Billing</h3>
+            <h3>Automated Society Management &amp; Maintenance Billing</h3>
             <p>
               100% automated invoicing, instant UPI payments, GST billing, and real-time bank ledger
               reconciliation for management committees.
@@ -977,7 +1074,7 @@ export function SmartNestLandingPage({
           <div className="pricing-card featured">
             <div className="popular-badge">MOST POPULAR</div>
             <div className="plan-header">
-              <h3>Professional ERP &amp; Gate</h3>
+              <h3>Professional Suite &amp; Gate</h3>
               <p>Complete suite for gated societies and residential complexes.</p>
               <div className="plan-price">
                 <span className="curr">₹</span>
@@ -1013,7 +1110,7 @@ export function SmartNestLandingPage({
             <ul className="plan-features">
               <li>✓ <strong>Everything in Professional, plus:</strong></li>
               <li>✓ Multi-gate sync across perimeter towers</li>
-              <li>✓ Custom ERP &amp; Tally integration</li>
+              <li>✓ Custom Accounting &amp; Tally integration</li>
               <li>✓ Automated boom barrier hardware API</li>
               <li>✓ 24/7 Priority Phone Hotline</li>
               <li>✓ Custom Society Domain / White-label</li>
@@ -1168,8 +1265,8 @@ export function SmartNestLandingPage({
                 <label className="form-field-wrap">
                   <span>Primary Area of Interest</span>
                   <select value={formInterest} onChange={(e) => setFormInterest(e.target.value)}>
-                    <option value="Complete Smart Community Suite">Complete Smart Community Suite (ERP + Gate + App)</option>
-                    <option value="Automated Maintenance Billing & ERP">Automated Maintenance Billing &amp; ERP</option>
+                    <option value="Complete Smart Community Suite">Complete Smart Community Suite (Admin + Gate + App)</option>
+                    <option value="Automated Maintenance Billing & Invoicing">Automated Maintenance Billing &amp; Invoicing</option>
                     <option value="Gate Security & Visitor Management">Gate Security &amp; Visitor Management</option>
                     <option value="Facility & Amenity Reservations">Facility &amp; Amenity Reservations</option>
                   </select>
@@ -1225,7 +1322,7 @@ export function SmartNestLandingPage({
               <SocietyLogo size={36} />
               <div className="brand-title-wrap">
                 <span className="brand-name white">SmartNest</span>
-                <span className="brand-tag">SOCIETY ERP</span>
+                <span className="brand-tag">COMMUNITY PLATFORM</span>
               </div>
             </div>
             <p className="footer-bio">
@@ -1323,59 +1420,17 @@ export function SmartNestLandingPage({
       {/* PRODUCTION LOGIN MODAL */}
       {loginModalOpen && (
         <div className="modal-backdrop" onClick={() => setLoginModalOpen(false)}>
-          <div className="demo-modal smartnest-auth-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500, width: '92%' }}>
+          <div className="demo-modal smartnest-auth-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, width: '92%' }}>
             <button className="modal-close icon-button" onClick={() => setLoginModalOpen(false)}>
               <X size={18} />
             </button>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-              <SocietyLogo size={44} />
+              <SocietyLogo size={48} />
             </div>
             <h3 style={{ marginBottom: 4, textAlign: 'center', fontSize: 22, fontWeight: 800 }}>Sign in to SmartNest</h3>
             <p style={{ color: 'var(--muted-2)', fontSize: 13, marginBottom: 20, textAlign: 'center' }}>
-              Access your society management dashboard or resident workspace.
+              Access your society management dashboard or resident portal.
             </p>
-
-            {/* Modal Tabs */}
-            <div className="auth-tab-bar" style={{ display: 'flex', background: '#f1f5f9', padding: 4, borderRadius: 10, marginBottom: 20 }}>
-              <button
-                type="button"
-                className={`auth-tab-btn ${authTab === 'login' ? 'active' : ''}`}
-                onClick={() => { setAuthTab('login'); setAuthError(null); }}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  border: 'none',
-                  background: authTab === 'login' ? '#ffffff' : 'transparent',
-                  color: authTab === 'login' ? 'var(--dark)' : 'var(--muted)',
-                  boxShadow: authTab === 'login' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                🔑 Account Sign In
-              </button>
-              <button
-                type="button"
-                className={`auth-tab-btn ${authTab === 'demo' ? 'active' : ''}`}
-                onClick={() => { setAuthTab('demo'); setAuthError(null); }}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  border: 'none',
-                  background: authTab === 'demo' ? '#ffffff' : 'transparent',
-                  color: authTab === 'demo' ? 'var(--dark)' : 'var(--muted)',
-                  boxShadow: authTab === 'demo' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                ⚡ Live Workspace
-              </button>
-            </div>
 
             {authError && (
               <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13, marginBottom: 16 }}>
@@ -1383,51 +1438,50 @@ export function SmartNestLandingPage({
               </div>
             )}
 
-            {/* TAB 1: PRODUCTION EMAIL SIGN IN */}
-            {authTab === 'login' && (
-              <form onSubmit={handleEmailSignIn} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Email Address</span>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <Mail size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
-                    <input
-                      type="email"
-                      required
-                      placeholder="name@example.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: 8, border: '1px solid var(--line)' }}
-                    />
-                  </div>
-                </label>
+            <form onSubmit={handleEmailSignIn} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Email Address</span>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Mail size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@example.com"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: 8, border: '1px solid var(--line)' }}
+                  />
+                </div>
+              </label>
 
-                <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>Password</span>
-                  </div>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <Lock size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
-                    <input
-                      type="password"
-                      required
-                      placeholder="Enter your password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: 8, border: '1px solid var(--line)' }}
-                    />
-                  </div>
-                </label>
+              <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Password</span>
+                </div>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Lock size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted-2)' }} />
+                  <input
+                    type="password"
+                    required
+                    placeholder="Enter your password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: 8, border: '1px solid var(--line)' }}
+                  />
+                </div>
+              </label>
 
-                <button
-                  type="submit"
-                  className="hero-btn-primary"
-                  disabled={authLoading}
-                  style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
-                >
-                  {authLoading ? 'Signing In...' : 'Sign In to Portal'}
-                </button>
+              <button
+                type="submit"
+                className="hero-btn-primary"
+                disabled={authLoading}
+                style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
+              >
+                {authLoading ? 'Signing In...' : 'Sign In to Portal'}
+              </button>
 
-                <div style={{ textAlign: 'center', marginTop: 10, fontSize: 13, color: 'var(--muted)' }}>
+              <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div>
                   New society?{' '}
                   <button
                     type="button"
@@ -1437,58 +1491,18 @@ export function SmartNestLandingPage({
                     Register Your Society
                   </button>
                 </div>
-              </form>
-            )}
-
-            {/* TAB 2: EXPLORE DIRECT WORKSPACE */}
-            {authTab === 'demo' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button
-                  type="button"
-                  className="role-select-card"
-                  onClick={() => handleLaunchRole('admin')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, border: '1px solid #e2e8f0', borderRadius: 10, background: '#ffffff', cursor: 'pointer', textAlign: 'left' }}
-                >
-                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#eff6ff', color: '#2563eb', display: 'grid', placeItems: 'center' }}>
-                    <ShieldCheck size={22} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <strong style={{ display: 'block', fontSize: 14, color: '#0f172a' }}>Management Committee / Admin</strong>
-                    <span style={{ fontSize: 12, color: '#64748b' }}>Full ERP access, billing, flats, complaints &amp; audit reports</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className="role-select-card"
-                  onClick={() => handleLaunchRole('resident')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, border: '1px solid #e2e8f0', borderRadius: 10, background: '#ffffff', cursor: 'pointer', textAlign: 'left' }}
-                >
-                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f5f3ff', color: '#7c3aed', display: 'grid', placeItems: 'center' }}>
-                    <UserCheck size={22} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <strong style={{ display: 'block', fontSize: 14, color: '#0f172a' }}>Resident &amp; Flat Owner Portal</strong>
-                    <span style={{ fontSize: 12, color: '#64748b' }}>Pay maintenance dues, guest passes, and amenity bookings</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className="role-select-card"
-                  onClick={() => handleLaunchRole('staff')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, border: '1px solid #e2e8f0', borderRadius: 10, background: '#ffffff', cursor: 'pointer', textAlign: 'left' }}
-                >
-                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#ecfdf5', color: '#059669', display: 'grid', placeItems: 'center' }}>
-                    <Shield size={22} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <strong style={{ display: 'block', fontSize: 14, color: '#0f172a' }}>Gate Security &amp; Guard Kiosk</strong>
-                    <span style={{ fontSize: 12, color: '#64748b' }}>Check-in visitors, deliveries, cabs, and staff attendance</span>
-                  </div>
-                </button>
+                <div>
+                  Have a society invite code?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setLoginModalOpen(false); setJoinModalOpen(true); }}
+                    style={{ background: 'none', border: 'none', color: '#0ea5e9', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                  >
+                    Join Society
+                  </button>
+                </div>
               </div>
-            )}
+            </form>
           </div>
         </div>
       )}

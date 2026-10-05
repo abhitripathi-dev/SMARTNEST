@@ -106,7 +106,7 @@ export function SocietyLogo({
           SmartNest
         </span>
         <span style={{ fontSize: Math.max(9, pixelSize * 0.28), color: subtextColor, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          Society ERP
+          Smart Community
         </span>
       </div>
     </div>

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { dataStore } from '../lib/dataStore';
-import type { Role, Society, Flat } from '../lib/supabase';
+import type { Role, Society, Flat } from '../lib/types';
 
 interface Props {
   isOpen: boolean;
@@ -82,17 +82,40 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
     const code = codeToVerify.trim();
     if (!code) {
       setSelectedSociety(null);
+      setError(null);
       return;
     }
     setVerifyingSociety(true);
     setError(null);
 
-    const found = await dataStore.societies.getByCodeOrName(code);
+    // 1. Check dataStore societies & backend
+    let found = await dataStore.societies.getByCodeOrName(code);
+
+    // 2. Check registered accounts in localStorage
+    if (!found) {
+      const storedAccounts = JSON.parse(localStorage.getItem('society_db_accounts') || '[]');
+      const cleanUpper = code.toUpperCase();
+      const matchedAccount = storedAccounts.find(
+        (a: any) =>
+          a.societyCode?.toUpperCase() === cleanUpper ||
+          a.society?.code?.toUpperCase() === cleanUpper ||
+          a.societyId?.toUpperCase() === cleanUpper ||
+          a.society?.name?.toLowerCase().includes(code.toLowerCase())
+      );
+      if (matchedAccount?.society) {
+        found = {
+          ...matchedAccount.society,
+          code: matchedAccount.societyCode || matchedAccount.society.code || cleanUpper,
+        };
+      }
+    }
+
     if (found) {
       setSelectedSociety(found);
+      setError(null);
     } else {
       setSelectedSociety(null);
-      setError(`No society found with code "${code}". Please verify your code or select your society from the registered list.`);
+      setError(`No society found with code "${code}". Please check with your society admin or select from list.`);
     }
     setVerifyingSociety(false);
   };
@@ -106,9 +129,16 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
     e.preventDefault();
     setError(null);
 
-    // 1. Mandatory Society Check
-    if (!selectedSociety) {
-      setError('Please enter a valid Society Code or select a registered society from the list.');
+    // 1. Mandatory Society Code
+    const effectiveCode = societyCodeInput.trim().toUpperCase() || selectedSociety?.code || '';
+    let targetSociety = selectedSociety;
+
+    if (!targetSociety && effectiveCode) {
+      targetSociety = await dataStore.societies.getByCodeOrName(effectiveCode);
+    }
+
+    if (!targetSociety) {
+      setError('Please enter a valid Society Code (e.g. SN-80477) or select your society.');
       return;
     }
 
@@ -138,9 +168,36 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
       return;
     }
 
-    // 6. Mandatory Flat Selection Check
+    // 6. Strict Unique Email Check
+    const existingAccounts = JSON.parse(localStorage.getItem('society_db_accounts') || '[]');
+    const existingResidents = JSON.parse(localStorage.getItem('society_db_residents') || '[]');
+    const existingMembers = JSON.parse(localStorage.getItem('society_db_members') || '[]');
+
+    if (
+      existingAccounts.some((a: any) => a.email?.toLowerCase().trim() === emailClean) ||
+      existingResidents.some((r: any) => r.email?.toLowerCase().trim() === emailClean) ||
+      existingMembers.some((m: any) => m.email?.toLowerCase().trim() === emailClean)
+    ) {
+      setError('This email address is already registered. Please sign in or use another email.');
+      return;
+    }
+
+    // 7. Strict Unique Mobile Check
+    if (
+      phoneDigits.length === 10 && (
+        existingAccounts.some((a: any) => a.profile?.phone?.replace(/\D/g, '').slice(-10) === phoneDigits) ||
+        existingResidents.some((r: any) => r.phone?.replace(/\D/g, '').slice(-10) === phoneDigits) ||
+        existingMembers.some((m: any) => m.phone?.replace(/\D/g, '').slice(-10) === phoneDigits)
+      )
+    ) {
+      setError('This mobile number is already registered with an existing account.');
+      return;
+    }
+
+    // 8. Mandatory Flat Selection Check
     const effectiveFlat = customFlatNumber.trim().toUpperCase() ||
-      availableFlats.find((f) => f.id === selectedFlatId)?.flat_number;
+      availableFlats.find((f) => f.id === selectedFlatId)?.flat_number ||
+      'A-101';
 
     if (!effectiveFlat) {
       setError('Please select your flat or enter your flat number.');
@@ -151,7 +208,14 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
 
     try {
       const fullPhone = `+91 ${phoneDigits}`;
-      const socId = selectedSociety.id;
+      const socId = targetSociety.id;
+
+      // Ensure society is persisted in dataStore
+      const allSocieties = await dataStore.societies.list();
+      if (!allSocieties.some((s) => s.id === socId)) {
+        const storedSocList = JSON.parse(localStorage.getItem('society_db_societies') || '[]');
+        localStorage.setItem('society_db_societies', JSON.stringify([targetSociety, ...storedSocList]));
+      }
 
       // Ensure flat exists in dataStore
       let flatIdToLink = selectedFlatId;
@@ -164,7 +228,7 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
           area: '1,350 sq ft',
           status: 'occupied',
         });
-        flatIdToLink = flatRes.data?.id || '';
+        flatIdToLink = flatRes.data?.id || `flat-${effectiveFlat.toLowerCase()}-${Date.now().toString(36)}`;
       }
 
       // Create resident in dataStore
@@ -174,7 +238,7 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
         full_name: fullName.trim(),
         phone: fullPhone,
         email: emailClean,
-        flat_id: flatIdToLink || null,
+        flat_id: flatIdToLink,
         type: type,
         status: 'active',
       });
@@ -197,9 +261,9 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
         email: emailClean,
         password: password,
         societyId: socId,
-        societyCode: selectedSociety.code || selectedSociety.id.substring(0, 8).toUpperCase(),
+        societyCode: targetSociety.code || effectiveCode,
         profile: newMember,
-        society: selectedSociety,
+        society: targetSociety,
         role: 'resident',
         created_at: new Date().toISOString(),
       };
@@ -223,7 +287,7 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
       window.dispatchEvent(new Event('society-auth-change'));
       window.dispatchEvent(new Event('society-data-change'));
 
-      setFinalSocietyName(selectedSociety.name);
+      setFinalSocietyName(targetSociety.name);
       setFinalFlatNumber(effectiveFlat);
       setJoinedSuccess(true);
     } catch (err: any) {

@@ -1,7 +1,16 @@
 import { createContext, useContext, useEffect, useState, type ReactNode, useCallback } from 'react';
-import type { Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured, type Profile, type Society, type Role, type Flat, type SocietyMember } from './supabase';
+import type { Profile, Society, Role, Flat, SocietyMember } from './types';
 import { dataStore, getLocal, setLocal, DEMO_SOCIETY_ID } from './dataStore';
+import { generateToken, verifyAndDecodeToken, removeJwtToken, getJwtToken, type DecodedJwt } from './jwt';
+import { api } from './api';
+
+export type UserSession = {
+  user: { id: string; email?: string | null };
+  access_token: string;
+  token_type?: string;
+  expires_in?: number;
+  refresh_token?: string;
+};
 
 type RegisteredAccount = {
   email: string;
@@ -15,9 +24,11 @@ type RegisteredAccount = {
 };
 
 type AuthContextValue = {
-  session: Session | null;
+  session: UserSession | null;
   profile: Profile | null;
   society: Society | null;
+  jwtToken: string | null;
+  decodedJwt: DecodedJwt | null;
   loading: boolean;
   needsOnboarding: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -102,10 +113,69 @@ const DEMO_PROFILES: Record<Role, { profile: Profile; society: Society }> = {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [society, setSociety] = useState<Society | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<UserSession | null>(() => {
+    const customRaw = typeof window !== 'undefined' ? localStorage.getItem('society_custom_registered') : null;
+    if (customRaw) {
+      try {
+        const custom = JSON.parse(customRaw);
+        if (custom.profile) {
+          return { user: { id: custom.profile.id, email: custom.email }, access_token: 'custom-auth-token' };
+        }
+      } catch {}
+    }
+    const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
+    if (DEMO_PROFILES[storedDemo]) {
+      return { user: { id: DEMO_PROFILES[storedDemo].profile.id, email: `${storedDemo}@smartnest.community` }, access_token: 'demo-token' };
+    }
+    return null;
+  });
+
+  const [profile, setProfile] = useState<Profile | null>(() => {
+    const customRaw = typeof window !== 'undefined' ? localStorage.getItem('society_custom_registered') : null;
+    if (customRaw) {
+      try {
+        const custom = JSON.parse(customRaw);
+        if (custom.profile) return custom.profile;
+      } catch {}
+    }
+    const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
+    return DEMO_PROFILES[storedDemo]?.profile || DEMO_PROFILES.admin.profile;
+  });
+
+  const [society, setSociety] = useState<Society | null>(() => {
+    const customRaw = typeof window !== 'undefined' ? localStorage.getItem('society_custom_registered') : null;
+    if (customRaw) {
+      try {
+        const custom = JSON.parse(customRaw);
+        if (custom.society) return custom.society;
+      } catch {}
+    }
+    const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
+    return DEMO_PROFILES[storedDemo]?.society || DEMO_PROFILES.admin.society;
+  });
+
+  const [jwtToken, setJwtToken] = useState<string | null>(() => getJwtToken());
+  const [decodedJwt, setDecodedJwt] = useState<DecodedJwt | null>(() => verifyAndDecodeToken());
+  const [loading, setLoading] = useState(false);
+
+  // Sync JWT token when profile changes
+  const updateJwt = useCallback((userProfile: Profile | null, userSociety: Society | null, email?: string) => {
+    if (userProfile) {
+      const token = generateToken({
+        sub: userProfile.id,
+        email: email || `${userProfile.role}@smartnest.community`,
+        name: userProfile.full_name,
+        role: userProfile.role,
+        society_id: userSociety?.id || DEMO_SOCIETY_ID,
+      });
+      setJwtToken(token);
+      setDecodedJwt(verifyAndDecodeToken(token));
+    } else {
+      removeJwtToken();
+      setJwtToken(null);
+      setDecodedJwt(null);
+    }
+  }, []);
 
   const loadProfile = useCallback(async (userId: string) => {
     try {
@@ -116,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (matchedAccount) {
         setProfile(matchedAccount.profile);
         setSociety(matchedAccount.society);
+        updateJwt(matchedAccount.profile, matchedAccount.society, matchedAccount.email);
         return;
       }
 
@@ -127,48 +198,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // 2. Try Supabase
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-      if (prof) {
-        setProfile(prof as Profile);
-        if (prof.society_id) {
-          const { data: soc } = await supabase.from('societies').select('*').eq('id', prof.society_id).maybeSingle();
-          setSociety((soc as Society) || null);
-        } else {
-          setSociety(null);
+      // 2. Try MySQL Backend me
+      try {
+        const me = await api.auth.me();
+        if (me?.profile) {
+          setProfile(me.profile);
+          setSociety(me.society);
+          return;
         }
-        return;
-      }
+      } catch {}
 
       // 3. Demo fallback
-      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
+      const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
       if (storedDemo && DEMO_PROFILES[storedDemo]) {
         setProfile(DEMO_PROFILES[storedDemo].profile);
         setSociety(DEMO_PROFILES[storedDemo].society);
       } else {
-        setProfile(null);
-        setSociety(null);
+        setProfile(DEMO_PROFILES.admin.profile);
+        setSociety(DEMO_PROFILES.admin.society);
       }
     } catch {
-      const customRaw = localStorage.getItem('society_custom_registered');
-      if (customRaw) {
-        const custom = JSON.parse(customRaw);
-        setProfile(custom.profile);
-        setSociety(custom.society);
-        return;
-      }
-
-      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
+      const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
       if (storedDemo && DEMO_PROFILES[storedDemo]) {
         setProfile(DEMO_PROFILES[storedDemo].profile);
         setSociety(DEMO_PROFILES[storedDemo].society);
       }
     }
-  }, []);
+  }, [updateJwt]);
 
   useEffect(() => {
+    // Background check for remote profile if JWT exists
+    const storedToken = localStorage.getItem('society_auth_token') || localStorage.getItem('jwt_token');
+    if (storedToken) {
+      api.auth
+        .me()
+        .then((me) => {
+          if (me?.profile) {
+            setProfile(me.profile);
+            setSociety(me.society);
+            setSession({
+              user: { id: me.id, email: me.email },
+              access_token: storedToken,
+            });
+            if (me.society?.id) localStorage.setItem('society_active_id', me.society.id);
+          }
+        })
+        .catch(() => {});
+    }
+
     const syncCurrentAuth = () => {
-      // 1. Check if user is logged into a custom registered society
       const customRaw = localStorage.getItem('society_custom_registered');
       if (customRaw) {
         try {
@@ -177,65 +255,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile(custom.profile);
             setSociety(custom.society);
             setSession({
-              user: { id: custom.profile.id, email: custom.email } as Session['user'],
+              user: { id: custom.profile.id, email: custom.email },
               access_token: 'custom-auth-token',
-              token_type: 'bearer',
-              expires_in: 86400,
-              refresh_token: 'custom-refresh-token',
-            } as Session);
+            });
             localStorage.setItem('society_active_id', custom.societyId);
-            setLoading(false);
-            return true;
+            return;
           }
         } catch {}
       }
 
-      // 2. Check demo role
-      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
-      if (storedDemo && DEMO_PROFILES[storedDemo]) {
+      const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
+      if (DEMO_PROFILES[storedDemo]) {
         setProfile(DEMO_PROFILES[storedDemo].profile);
         setSociety(DEMO_PROFILES[storedDemo].society);
         setSession({
-          user: { id: DEMO_PROFILES[storedDemo].profile.id, email: `${storedDemo}@smartnest.community` } as Session['user'],
+          user: { id: DEMO_PROFILES[storedDemo].profile.id, email: `${storedDemo}@smartnest.community` },
           access_token: 'demo-token',
-          token_type: 'bearer',
-          expires_in: 3600,
-          refresh_token: 'demo-refresh-token',
-        } as Session);
-        setLoading(false);
-        return true;
+        });
       }
-
-      return false;
     };
-
-    if (syncCurrentAuth()) return;
-
-    // 3. Supabase session check
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      setSession(existingSession);
-      if (existingSession?.user) {
-        loadProfile(existingSession.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    }).catch(() => {
-      setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
-      setSession(newSession);
-      if (event === 'SIGNED_OUT' || !newSession) {
-        localStorage.removeItem('society_demo_role');
-        setProfile(null);
-        setSociety(null);
-        setLoading(false);
-        return;
-      }
-      if (newSession?.user) {
-        loadProfile(newSession.user.id).finally(() => setLoading(false));
-      }
-    });
 
     const handleAuthChange = () => {
       syncCurrentAuth();
@@ -243,10 +281,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('society-auth-change', handleAuthChange);
 
     return () => {
-      listener.subscription.unsubscribe();
       window.removeEventListener('society-auth-change', handleAuthChange);
     };
   }, [loadProfile]);
+
+  // Always keep JWT token in sync with the active profile
+  useEffect(() => {
+    if (profile) {
+      updateJwt(profile, society, session?.user?.email ?? undefined);
+    }
+  }, [profile, society, session, updateJwt]);
 
   const registerNewSociety = async (params: {
     societyName: string;
@@ -260,14 +304,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     adminPassword: string;
   }) => {
     try {
+      const cleanEmail = params.adminEmail.toLowerCase().trim();
+      const cleanPhoneDigits = params.adminPhone.replace(/\D/g, '').slice(-10);
+
+      // 1. Strict Unique Email Validation
+      const existingAccounts = getLocal<RegisteredAccount[]>('accounts', []);
+      const existingResidents = getLocal<any[]>('residents', []);
+      const existingMembers = getLocal<any[]>('members', []);
+
+      if (
+        existingAccounts.some((a) => a.email?.toLowerCase().trim() === cleanEmail) ||
+        existingResidents.some((r) => r.email?.toLowerCase().trim() === cleanEmail) ||
+        existingMembers.some((m) => m.email?.toLowerCase().trim() === cleanEmail)
+      ) {
+        return {
+          error: 'This email address is already registered. Please sign in or use another email.',
+          credentials: { societyCode: '', totalFlats: 0 },
+        };
+      }
+
+      // 2. Strict Unique Mobile Validation
+      if (
+        cleanPhoneDigits.length === 10 && (
+          existingAccounts.some((a) => a.profile?.phone?.replace(/\D/g, '').slice(-10) === cleanPhoneDigits) ||
+          existingResidents.some((r) => r.phone?.replace(/\D/g, '').slice(-10) === cleanPhoneDigits) ||
+          existingMembers.some((m) => m.phone?.replace(/\D/g, '').slice(-10) === cleanPhoneDigits)
+        )
+      ) {
+        return {
+          error: 'This mobile number is already registered with an existing account.',
+          credentials: { societyCode: '', totalFlats: 0 },
+        };
+      }
+
       const societyCode = `SN-${Math.floor(10000 + Math.random() * 90000)}`;
       const societyId = `soc-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
       const adminId = `usr-admin-${Date.now().toString(36)}`;
 
       const newSociety: Society = {
         id: societyId,
-        name: params.societyName,
+        name: params.societyName.trim(),
         address: params.address || `${params.city}, India`,
+        code: societyCode,
         created_by: adminId,
         created_at: new Date().toISOString(),
       };
@@ -275,44 +353,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const newProfile: Profile = {
         id: adminId,
         society_id: societyId,
-        full_name: `${params.adminName} (Admin)`,
+        full_name: `${params.adminName.trim()} (Admin)`,
         phone: params.adminPhone || '+91 98200 00000',
         role: 'admin',
         avatar_color: 'teal',
         created_at: new Date().toISOString(),
       };
 
-      // Generate Starter Flats across all configured wings
+      // Generate Starter Flats across all configured wings (up to 250 flats/wing)
       const generatedFlats: Flat[] = [];
-      const cleanWings = params.wings.length > 0 ? params.wings : ['A', 'B'];
+      const cleanWings = params.wings.length > 0 ? params.wings : ['A Wing', 'B Wing'];
+      const flatsCount = Math.min(Math.max(Number(params.flatsPerWing) || 8, 1), 250);
+
       cleanWings.forEach((wing) => {
-        for (let i = 1; i <= params.flatsPerWing; i++) {
-          const floorNum = Math.ceil(i / 2);
-          const flatNum = `${wing}-${floorNum}${i % 2 === 1 ? '01' : '02'}`;
-          generatedFlats.push({
-            id: `flat-${wing.toLowerCase()}-${i}-${Date.now().toString(36)}`,
-            society_id: societyId,
-            flat_number: flatNum,
-            block: `${wing} Wing`,
-            floor: `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor`,
-            area: '1,350 sq ft',
-            status: i === 1 && wing === cleanWings[0] ? 'occupied' : 'vacant',
-            created_at: new Date().toISOString(),
-          });
+        const wingLetter = wing.replace(' Wing', '').trim() || 'A';
+        for (let floor = 1; floor <= Math.ceil(flatsCount / 2); floor++) {
+          for (let f = 1; f <= 2; f++) {
+            if (generatedFlats.length >= cleanWings.length * flatsCount) break;
+            const flatNum = `${wingLetter}-${floor}0${f}`;
+            generatedFlats.push({
+              id: `flat-${wingLetter.toLowerCase()}-${floor}0${f}-${Date.now().toString(36)}`,
+              society_id: societyId,
+              flat_number: flatNum,
+              block: `${wingLetter} Wing`,
+              floor: `${floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`} Floor`,
+              area: '1,250 sq ft',
+              status: generatedFlats.length === 0 ? 'occupied' : 'vacant',
+              created_at: new Date().toISOString(),
+            });
+          }
         }
       });
 
-      // Initialize society in dataStore with fresh custom data
+      // Initialize society in local store & persistent registry
       dataStore.initializeSociety(newSociety, newProfile, generatedFlats, {
         name: params.adminName,
-        email: params.adminEmail,
+        email: cleanEmail,
         phone: params.adminPhone,
       });
 
-      // Save to persistent accounts list
-      const accounts = getLocal<RegisteredAccount[]>('accounts', []);
       const newAccount: RegisteredAccount = {
-        email: params.adminEmail.toLowerCase().trim(),
+        email: cleanEmail,
         password: params.adminPassword,
         societyId,
         societyCode,
@@ -321,32 +402,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: 'admin',
         created_at: new Date().toISOString(),
       };
-      setLocal('accounts', [newAccount, ...accounts.filter((a) => a.email !== newAccount.email)]);
 
-      // Save active registration payload
+      setLocal('accounts', [newAccount, ...existingAccounts.filter((a) => a.email !== newAccount.email)]);
+
+      const allSocieties = getLocal<Society[]>('societies', []);
+      setLocal('societies', [newSociety, ...allSocieties.filter((s) => s.id !== societyId)]);
+
       localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
       localStorage.setItem('society_active_id', societyId);
       localStorage.setItem('society_view_mode', 'portal');
       localStorage.removeItem('society_demo_role');
 
-      // Sync with Supabase if reachable
+      // Sync with MySQL API if online
       try {
-        await supabase.from('societies').insert(newSociety);
-        await supabase.from('profiles').insert(newProfile);
-        if (generatedFlats.length > 0) {
-          await supabase.from('flats').insert(generatedFlats);
-        }
+        await api.auth.registerSociety(params);
       } catch {}
 
       setProfile(newProfile);
       setSociety(newSociety);
       setSession({
-        user: { id: adminId, email: params.adminEmail } as Session['user'],
+        user: { id: adminId, email: params.adminEmail },
         access_token: 'custom-auth-token',
-        token_type: 'bearer',
-        expires_in: 86400,
-        refresh_token: 'custom-refresh-token',
-      } as Session);
+      });
       setLoading(false);
 
       return {
@@ -356,28 +433,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           totalFlats: generatedFlats.length,
         },
       };
-    } catch (err: any) {
-      return { error: err?.message || 'Failed to initialize society database', credentials: { societyCode: '', totalFlats: 0 } };
+    } catch {
+      return {
+        error: 'Failed to create society. Please try again.',
+        credentials: { societyCode: '', totalFlats: 0 },
+      };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     const cleanEmail = email.trim().toLowerCase();
-    // 1. Check registered accounts in dataStore
+    const cleanPassword = password.trim();
+
+    // 0. Try MySQL API Server Login first
+    try {
+      const loginRes = await api.auth.login({ email: cleanEmail, password: cleanPassword });
+      if (loginRes?.token && loginRes.user) {
+        const usr = loginRes.user;
+        if (usr.profile) setProfile(usr.profile);
+        if (usr.society) setSociety(usr.society);
+        setSession({
+          user: { id: usr.id, email: usr.email },
+          access_token: loginRes.token,
+        });
+        if (usr.society?.id) localStorage.setItem('society_active_id', usr.society.id);
+        localStorage.setItem('society_auth_token', loginRes.token);
+        localStorage.setItem('jwt_token', loginRes.token);
+        localStorage.setItem('society_view_mode', 'portal');
+        localStorage.removeItem('society_demo_role');
+        setLoading(false);
+        return { error: null };
+      }
+    } catch {
+      // Backend not reached or not found in DB - seamlessly fallback to local stores
+    }
+
+    // 1. Check registered accounts in dataStore (society_db_accounts)
     const accounts = getLocal<RegisteredAccount[]>('accounts', []);
-    const matchedAccount = accounts.find((a) => a.email.toLowerCase() === cleanEmail);
+    const matchedAccount = accounts.find((a) => a.email && a.email.toLowerCase().trim() === cleanEmail);
 
     if (matchedAccount) {
-      if (matchedAccount.password === password) {
+      if (matchedAccount.password === password || matchedAccount.password === cleanPassword) {
         setProfile(matchedAccount.profile);
         setSociety(matchedAccount.society);
         setSession({
-          user: { id: matchedAccount.profile.id, email: matchedAccount.email } as Session['user'],
+          user: { id: matchedAccount.profile.id, email: matchedAccount.email },
           access_token: 'custom-auth-token',
-          token_type: 'bearer',
-          expires_in: 86400,
-          refresh_token: 'custom-refresh-token',
-        } as Session);
+        });
         localStorage.setItem('society_active_id', matchedAccount.societyId);
         localStorage.setItem('society_custom_registered', JSON.stringify(matchedAccount));
         localStorage.setItem('society_view_mode', 'portal');
@@ -389,11 +491,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // 2. Check staff/resident accounts created in society members
+    // 2. Check society_custom_registered in localStorage
+    try {
+      const customRaw = localStorage.getItem('society_custom_registered');
+      if (customRaw) {
+        const custom = JSON.parse(customRaw);
+        if (custom.email && custom.email.toLowerCase().trim() === cleanEmail) {
+          if (custom.password === password || custom.password === cleanPassword) {
+            setProfile(custom.profile);
+            setSociety(custom.society);
+            setSession({
+              user: { id: custom.profile?.id || 'usr-custom', email: custom.email },
+              access_token: 'custom-auth-token',
+            });
+            localStorage.setItem('society_active_id', custom.societyId);
+            localStorage.setItem('society_view_mode', 'portal');
+            localStorage.removeItem('society_demo_role');
+            setLoading(false);
+            return { error: null };
+          } else {
+            return { error: 'Incorrect password. Please verify your credentials.' };
+          }
+        }
+      }
+    } catch {}
+
+    // 3. Check staff/resident accounts created in society members
     const members = getLocal<Array<SocietyMember & { password?: string }>>('members', []);
-    const matchedMember = members.find((m) => m.email && m.email.toLowerCase() === cleanEmail);
+    const matchedMember = members.find((m) => m.email && m.email.toLowerCase().trim() === cleanEmail);
     if (matchedMember) {
-      if (matchedMember.password && matchedMember.password === password) {
+      if (matchedMember.password && (matchedMember.password === password || matchedMember.password === cleanPassword)) {
         const targetSocietyId = matchedMember.society_id || DEMO_SOCIETY_ID;
         const socList = await dataStore.societies.list();
         const memberSoc = socList.find((s) => s.id === targetSocietyId) || {
@@ -428,113 +555,112 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(memberProfile);
         setSociety(memberSoc as Society);
         setSession({
-          user: { id: memberProfile.id, email: matchedMember.email } as Session['user'],
+          user: { id: memberProfile.id, email: matchedMember.email },
           access_token: 'custom-auth-token',
-          token_type: 'bearer',
-          expires_in: 86400,
-          refresh_token: 'custom-refresh-token',
-        } as Session);
+        });
         localStorage.setItem('society_active_id', targetSocietyId);
         localStorage.setItem('society_custom_registered', JSON.stringify(sessionAccount));
         localStorage.setItem('society_view_mode', 'portal');
         localStorage.removeItem('society_demo_role');
         setLoading(false);
         return { error: null };
-      } else {
+      } else if (matchedMember.password) {
         return { error: 'Incorrect password. Please verify your credentials.' };
       }
     }
 
-    // 3. Supabase cloud sign-in if connected
-    if (isSupabaseConfigured) {
-      try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (!error) return { error: null };
-      } catch {}
+    // 4. Default demo credentials fallback
+    if (cleanEmail === 'admin@smartnest.community' && (password === 'password' || password === 'admin' || password === 'admin123')) {
+      switchDemoRole('admin');
+      return { error: null };
     }
 
-    return { error: 'No registered account found with this email. Please register your society or join as a resident.' };
+    return { error: 'Invalid email or password. Please verify your credentials or register your society.' };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
-      });
-      if (error) {
-        // Local signup fallback
-        const adminId = `usr-${Date.now()}`;
-        const newSociety: Society = {
-          id: `soc-${Date.now()}`,
-          name: `${fullName}'s Community`,
-          address: 'India',
-          created_by: adminId,
-          created_at: new Date().toISOString(),
-        };
-        const newProfile: Profile = {
-          id: adminId,
-          society_id: newSociety.id,
-          full_name: `${fullName} (Admin)`,
-          phone: '+91 98000 00000',
-          role: 'admin',
-          avatar_color: 'teal',
-          created_at: new Date().toISOString(),
-        };
-
-        const starterFlats: Flat[] = [
-          { id: `flat-a-101-${Date.now()}`, society_id: newSociety.id, flat_number: 'A-101', block: 'A Wing', floor: '1st Floor', area: '1,250 sq ft', status: 'occupied', created_at: new Date().toISOString() },
-          { id: `flat-a-102-${Date.now()}`, society_id: newSociety.id, flat_number: 'A-102', block: 'A Wing', floor: '1st Floor', area: '1,250 sq ft', status: 'vacant', created_at: new Date().toISOString() },
-        ];
-
-        dataStore.initializeSociety(newSociety, newProfile, starterFlats);
-
-        const newAccount: RegisteredAccount = {
-          email: email.toLowerCase().trim(),
-          password,
-          societyId: newSociety.id,
-          societyCode: `SN-${Math.floor(10000 + Math.random() * 90000)}`,
-          profile: newProfile,
-          society: newSociety,
-          role: 'admin',
-          created_at: new Date().toISOString(),
-        };
-
-        const accounts = getLocal<RegisteredAccount[]>('accounts', []);
-        setLocal('accounts', [newAccount, ...accounts]);
-        localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
-        localStorage.setItem('society_active_id', newSociety.id);
-        localStorage.setItem('society_view_mode', 'portal');
-
-        setProfile(newProfile);
-        setSociety(newSociety);
+      const res = await api.auth.register({ email, password, fullName });
+      if (res?.token && res?.user) {
+        setProfile(res.user.profile);
+        setSociety(res.user.society);
         setSession({
-          user: { id: newProfile.id, email } as Session['user'],
-          access_token: 'custom-auth-token',
-          token_type: 'bearer',
-          expires_in: 86400,
-          refresh_token: 'custom-refresh-token',
-        } as Session);
-        setLoading(false);
+          user: { id: res.user.id, email: res.user.email },
+          access_token: res.token,
+        });
+        localStorage.setItem('society_auth_token', res.token);
+        localStorage.setItem('jwt_token', res.token);
         return { error: null };
       }
-      return { error: null };
-    } catch {
-      return { error: 'Registration failed. Please try again.' };
-    }
+    } catch {}
+
+    // Local signup fallback
+    const adminId = `usr-${Date.now()}`;
+    const newSociety: Society = {
+      id: `soc-${Date.now()}`,
+      name: `${fullName}'s Community`,
+      address: 'India',
+      created_by: adminId,
+      created_at: new Date().toISOString(),
+    };
+    const newProfile: Profile = {
+      id: adminId,
+      society_id: newSociety.id,
+      full_name: `${fullName} (Admin)`,
+      phone: '+91 98000 00000',
+      role: 'admin',
+      avatar_color: 'teal',
+      created_at: new Date().toISOString(),
+    };
+
+    const starterFlats: Flat[] = [
+      { id: `flat-a-101-${Date.now()}`, society_id: newSociety.id, flat_number: 'A-101', block: 'A Wing', floor: '1st Floor', area: '1,250 sq ft', status: 'occupied', created_at: new Date().toISOString() },
+      { id: `flat-a-102-${Date.now()}`, society_id: newSociety.id, flat_number: 'A-102', block: 'A Wing', floor: '1st Floor', area: '1,250 sq ft', status: 'vacant', created_at: new Date().toISOString() },
+    ];
+
+    dataStore.initializeSociety(newSociety, newProfile, starterFlats);
+
+    const newAccount: RegisteredAccount = {
+      email: email.toLowerCase().trim(),
+      password,
+      societyId: newSociety.id,
+      societyCode: `SN-${Math.floor(10000 + Math.random() * 90000)}`,
+      profile: newProfile,
+      society: newSociety,
+      role: 'admin',
+      created_at: new Date().toISOString(),
+    };
+
+    const existingAccounts = getLocal<RegisteredAccount[]>('accounts', []);
+    setLocal('accounts', [newAccount, ...existingAccounts.filter((a) => a.email !== newAccount.email)]);
+
+    setProfile(newProfile);
+    setSociety(newSociety);
+    setSession({
+      user: { id: adminId, email },
+      access_token: 'custom-auth-token',
+    });
+    localStorage.setItem('society_active_id', newSociety.id);
+    localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
+    localStorage.setItem('society_view_mode', 'portal');
+    localStorage.removeItem('society_demo_role');
+    setLoading(false);
+
+    return { error: null };
   };
 
   const signOut = async () => {
     localStorage.removeItem('society_demo_role');
     localStorage.removeItem('society_custom_registered');
     localStorage.removeItem('society_active_id');
-    try {
-      await supabase.auth.signOut();
-    } catch {}
+    localStorage.removeItem('society_auth_token');
+    localStorage.removeItem('jwt_token');
+    removeJwtToken();
     setSession(null);
     setProfile(null);
     setSociety(null);
+    setJwtToken(null);
+    setDecodedJwt(null);
   };
 
   const switchDemoRole = (role: Role) => {
@@ -545,25 +671,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('society_view_mode', 'portal');
     setProfile(data.profile);
     setSociety(data.society);
+    updateJwt(data.profile, data.society, `${role}@smartnest.community`);
     setSession({
-      user: { id: data.profile.id, email: `${role}@smartnest.community` } as Session['user'],
+      user: { id: data.profile.id, email: `${role}@smartnest.community` },
       access_token: 'demo-token',
-      token_type: 'bearer',
-      expires_in: 3600,
-      refresh_token: 'demo-refresh-token',
-    } as Session);
+    });
     setLoading(false);
+    setTimeout(() => {
+      window.dispatchEvent(new Event('society-auth-change'));
+      window.dispatchEvent(new Event('society-data-change'));
+    }, 50);
   };
 
   const createSociety = async (name: string, fullName: string, address?: string) => {
     if (!session?.user) return { error: 'Not authenticated' };
     try {
-      const { data, error } = await supabase.rpc('create_society_and_assign', {
-        society_name: name,
-        society_address: address ?? null,
-        user_full_name: fullName,
+      await api.auth.registerSociety({
+        societyName: name,
+        city: address || 'Mumbai',
+        adminName: fullName,
+        adminEmail: session.user.email || 'admin@smartnest.community',
+        adminPhone: '+91 98000 00000',
+        adminPassword: 'password',
+        wings: ['A Wing', 'B Wing'],
+        flatsPerWing: 4,
       });
-      if (error) return { error: error.message };
       await loadProfile(session.user.id);
       return { error: null };
     } catch (err: any) {
@@ -574,11 +706,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const joinSociety = async (societyId: string, role: 'resident' | 'staff') => {
     if (!session?.user) return { error: 'Not authenticated' };
     try {
-      const { error } = await supabase.rpc('join_society', {
-        target_society_id: societyId,
-        target_role: role,
-      });
-      if (error) return { error: error.message };
+      await api.auth.joinSociety({ societyId, role });
       await loadProfile(session.user.id);
       return { error: null };
     } catch (err: any) {
@@ -590,6 +718,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!profile) return { error: 'Not authenticated' };
     const updatedProfile = { ...profile, ...updates };
     setProfile(updatedProfile);
+    updateJwt(updatedProfile, society, session?.user?.email ?? undefined);
 
     const customRaw = localStorage.getItem('society_custom_registered');
     if (customRaw) {
@@ -600,11 +729,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {}
     }
 
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('profiles').update(updates).eq('id', profile.id);
-      } catch {}
-    }
+    try {
+      await api.auth.updateProfile(updates);
+    } catch {}
 
     return { error: null };
   };
@@ -613,6 +740,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!society) return { error: 'Not authenticated' };
     const updatedSociety = { ...society, ...updates };
     setSociety(updatedSociety);
+    updateJwt(profile, updatedSociety, session?.user?.email ?? undefined);
 
     const customRaw = localStorage.getItem('society_custom_registered');
     if (customRaw) {
@@ -620,12 +748,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const custom = JSON.parse(customRaw);
         custom.society = updatedSociety;
         localStorage.setItem('society_custom_registered', JSON.stringify(custom));
-      } catch {}
-    }
-
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('societies').update(updates).eq('id', society.id);
       } catch {}
     }
 
@@ -644,6 +766,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         society,
+        jwtToken,
+        decodedJwt,
         loading,
         needsOnboarding: !society,
         signIn,
@@ -664,28 +788,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 }
 
 export function usePermissions() {
   const { profile } = useAuth();
-  const role = profile?.role ?? 'resident';
+  const role = profile?.role || 'resident';
   return {
-    role,
     isAdmin: role === 'admin',
     isStaff: role === 'staff',
     isResident: role === 'resident',
-    canManageSociety: role === 'admin',
-    canManageMembers: role === 'admin',
-    canManageBilling: role === 'admin',
-    canManageBills: role === 'admin',
+    role,
     canManageVisitors: role === 'admin' || role === 'staff',
-    canRecordVisitors: role === 'admin' || role === 'staff',
-    canUpdateComplaints: role === 'admin' || role === 'staff',
+    canManageFlats: role === 'admin',
+    canManageResidents: role === 'admin',
+    canManageBills: role === 'admin',
+    canManageComplaints: true,
     canUpdateComplaintStatus: role === 'admin' || role === 'staff',
     canDeleteComplaints: role === 'admin',
-    canBookFacilities: true,
+    canManageFacilities: role === 'admin' || role === 'staff',
+    canManageSettings: role === 'admin',
   };
 }

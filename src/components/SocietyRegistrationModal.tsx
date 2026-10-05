@@ -23,7 +23,7 @@ import {
 import { useAuth } from '../lib/auth';
 import { dataStore } from '../lib/dataStore';
 import { SocietyLogo } from './SocietyLogo';
-import type { Role } from '../lib/supabase';
+import type { Role } from '../lib/types';
 
 interface Props {
   isOpen: boolean;
@@ -289,7 +289,7 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
                 Register your Society or Apartment
               </h2>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-                Set up a new isolated workspace for your community with automated flats and resident database.
+                Set up a new isolated community portal with automated flats and resident database.
               </p>
             </div>
 
@@ -349,13 +349,13 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
               </label>
 
               <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Flats / Wing</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Flats / Wing (1–250)</span>
                 <input
                   type="number"
-                  min="2"
-                  max="100"
+                  min="1"
+                  max="250"
                   value={flatsPerWing}
-                  onChange={(e) => setFlatsPerWing(Number(e.target.value))}
+                  onChange={(e) => setFlatsPerWing(Math.min(Math.max(Number(e.target.value) || 1, 1), 250))}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
                 />
               </label>

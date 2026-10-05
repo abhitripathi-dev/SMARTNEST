@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { ArrowUpRight, Building2, Loader2, ShieldCheck, UserCheck, Users } from 'lucide-react';
 import { useAuth } from './auth';
-import type { Role } from './supabase';
+import type { Role } from './types';
 
 export function AuthPage() {
-  const { signIn, signUp, switchDemoRole } = useAuth();
+  const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,10 +30,6 @@ export function AuthPage() {
     setBusy(false);
   };
 
-  const handleQuickDemo = (role: Role) => {
-    switchDemoRole(role);
-  };
-
   return (
     <div className="auth-page">
       <div className="auth-glow" />
@@ -47,45 +43,6 @@ export function AuthPage() {
         <p className="auth-subtitle">
           {mode === 'signin' ? 'Sign in to manage your community with clarity and ease.' : 'Start managing your residential society in minutes.'}
         </p>
-
-        {/* Quick Demo Selector */}
-        <div className="demo-role-banner" style={{ marginBottom: 20, padding: 12, borderRadius: 'var(--radius-xs)', background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, textAlign: 'center' }}>
-            ⚡ Quick Test / Demo Sign In
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-            <button
-              type="button"
-              className="outline-button"
-              style={{ fontSize: 11, padding: '6px 4px', justifyContent: 'center', height: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}
-              onClick={() => handleQuickDemo('admin')}
-              title="Sign in as Administrator"
-            >
-              <ShieldCheck size={14} style={{ color: 'var(--blue)' }} />
-              <strong>Admin</strong>
-            </button>
-            <button
-              type="button"
-              className="outline-button"
-              style={{ fontSize: 11, padding: '6px 4px', justifyContent: 'center', height: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}
-              onClick={() => handleQuickDemo('staff')}
-              title="Sign in as Society Staff"
-            >
-              <UserCheck size={14} style={{ color: 'var(--teal)' }} />
-              <strong>Staff</strong>
-            </button>
-            <button
-              type="button"
-              className="outline-button"
-              style={{ fontSize: 11, padding: '6px 4px', justifyContent: 'center', height: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}
-              onClick={() => handleQuickDemo('resident')}
-              title="Sign in as Resident"
-            >
-              <Users size={14} style={{ color: 'var(--gold)' }} />
-              <strong>Resident</strong>
-            </button>
-          </div>
-        </div>
 
         <div className="onboarding-tabs" style={{ marginBottom: 18 }}>
           <button className={mode === 'signin' ? 'active' : ''} onClick={() => { setMode('signin'); setError(null); setMessage(null); }}>
@@ -138,7 +95,7 @@ export function AuthPage() {
 
           <button type="submit" className="primary-button auth-submit" disabled={busy}>
             {busy ? <Loader2 size={18} className="spin" /> : null}
-            {mode === 'signin' ? 'Sign in to workspace' : 'Create society account'} <ArrowUpRight size={18} />
+            {mode === 'signin' ? 'Sign in to portal' : 'Create society account'} <ArrowUpRight size={18} />
           </button>
         </form>
 
@@ -188,7 +145,7 @@ export function OnboardingPage() {
           <span>SOCIETY<span className="brand-dot">.</span></span>
         </div>
 
-        <h1 className="auth-title">Set up your workspace</h1>
+        <h1 className="auth-title">Set up your community portal</h1>
         <p className="auth-subtitle">Create a brand-new society community or join an existing one.</p>
 
         <div className="onboarding-tabs">
@@ -262,7 +219,7 @@ export function OnboardingPage() {
 
           <button type="submit" className="primary-button auth-submit" disabled={busy}>
             {busy ? <Loader2 size={18} className="spin" /> : null}
-            {mode === 'create' ? 'Create society workspace' : 'Join society'} <ArrowUpRight size={18} />
+            {mode === 'create' ? 'Create society portal' : 'Join society'} <ArrowUpRight size={18} />
           </button>
         </form>
       </div>

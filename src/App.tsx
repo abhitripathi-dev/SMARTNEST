@@ -38,6 +38,20 @@ import {
   WalletCards,
   X,
   Printer,
+  Database,
+  Phone,
+  AlertOctagon,
+  ExternalLink,
+  QrCode,
+  Bell,
+  Car,
+  CheckCircle,
+  Truck,
+  Info,
+  Share2,
+  Palette,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import {
   Area,
@@ -87,7 +101,7 @@ import type {
   Role,
   SocietyMember,
   Visitor,
-} from './lib/supabase';
+} from './lib/types';
 
 type View = 'overview' | 'residents' | 'flats' | 'maintenance' | 'complaints' | 'visitors' | 'facilities' | 'reports' | 'settings';
 
@@ -203,10 +217,14 @@ export function App() {
 }
 
 function AppShell() {
-  const { session, loading, profile, signOut, switchDemoRole } = useAuth();
+  const { session, loading, profile, signOut } = useAuth();
   const [view, setView] = useState<View>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pageLoading, setPageLoading] = useState(false);
+  const [themeAccent, setThemeAccent] = useState<'aurora' | 'emerald' | 'sunset' | 'amethyst' | 'midnight'>(() => {
+    return (localStorage.getItem('smartnest_theme_accent') as any) || 'aurora';
+  });
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(() => {
     // Default to Landing Page so the user immediately sees the SmartNest landing page
     const saved = localStorage.getItem('society_view_mode');
@@ -231,18 +249,9 @@ function AppShell() {
     });
   }, []);
 
-  const handleEnterPortal = (role?: Role) => {
-    const hasCustom = localStorage.getItem('society_custom_registered');
-    if (!hasCustom) {
-      if (role) {
-        switchDemoRole(role);
-      } else if (!session) {
-        switchDemoRole('admin');
-      }
-    } else {
-      window.dispatchEvent(new Event('society-auth-change'));
-      window.dispatchEvent(new Event('society-data-change'));
-    }
+  const handleEnterPortal = () => {
+    window.dispatchEvent(new Event('society-auth-change'));
+    window.dispatchEvent(new Event('society-data-change'));
     localStorage.setItem('society_view_mode', 'portal');
     setShowLanding(false);
   };
@@ -251,6 +260,18 @@ function AppShell() {
     localStorage.setItem('society_view_mode', 'landing');
     setShowLanding(true);
   };
+
+  // Listen for navigation events from children
+  useEffect(() => {
+    const handleNav = (e: Event) => {
+      const customEvent = e as CustomEvent<View>;
+      if (customEvent.detail) {
+        navigate(customEvent.detail);
+      }
+    };
+    window.addEventListener('navigate-view', handleNav as EventListener);
+    return () => window.removeEventListener('navigate-view', handleNav as EventListener);
+  }, [navigate]);
 
   if (loading) {
     return <LoadingState />;
@@ -269,7 +290,14 @@ function AppShell() {
   }
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout theme-${themeAccent}`}>
+      {/* Dynamic Ambient Background Glow Orbs */}
+      <div className="ambient-background-glow">
+        <div className="ambient-orb orb-1" />
+        <div className="ambient-orb orb-2" />
+        <div className="ambient-orb orb-3" />
+      </div>
+
       <Sidebar
         activeView={view}
         onNavigate={navigate}
@@ -288,17 +316,103 @@ function AppShell() {
               <Menu size={20} />
             </button>
             <div className="header-breadcrumbs">
-              <span className="crumb-root">Workspace</span>
+              <span className="crumb-root">Portal</span>
               <ChevronRight size={14} className="crumb-separator" />
               <span className="crumb-current">
                 {view === 'overview'
-                  ? 'Dashboard'
+                  ? (profile?.role === 'staff' ? 'Gate Dashboard' : 'Dashboard')
                   : view.charAt(0).toUpperCase() + view.slice(1)}
               </span>
             </div>
           </div>
 
           <div className="header-right">
+            {/* Dynamic Theme Color Accent Selector */}
+            <div className="theme-picker-container">
+              <button
+                className="theme-picker-btn"
+                onClick={() => setThemeMenuOpen(!themeMenuOpen)}
+                title="Change Theme Colors"
+                aria-label="Select Theme Color"
+              >
+                <Palette size={14} />
+                <span
+                  className="theme-dot"
+                  style={{
+                    background:
+                      themeAccent === 'aurora'
+                        ? '#2563eb'
+                        : themeAccent === 'emerald'
+                        ? '#059669'
+                        : themeAccent === 'sunset'
+                        ? '#f59e0b'
+                        : themeAccent === 'amethyst'
+                        ? '#8b5cf6'
+                        : '#6366f1',
+                  }}
+                />
+                <span className="hide-mobile" style={{ textTransform: 'capitalize' }}>
+                  {themeAccent === 'midnight' ? 'Midnight' : themeAccent}
+                </span>
+                <ChevronDown size={12} />
+              </button>
+
+              {themeMenuOpen && (
+                <div className="theme-dropdown-menu">
+                  <button
+                    className={`theme-option-item ${themeAccent === 'aurora' ? 'active' : ''}`}
+                    onClick={() => {
+                      setThemeAccent('aurora');
+                      localStorage.setItem('smartnest_theme_accent', 'aurora');
+                      setThemeMenuOpen(false);
+                    }}
+                  >
+                    <span className="theme-dot" style={{ background: '#2563eb' }} /> Aurora Azure
+                  </button>
+                  <button
+                    className={`theme-option-item ${themeAccent === 'emerald' ? 'active' : ''}`}
+                    onClick={() => {
+                      setThemeAccent('emerald');
+                      localStorage.setItem('smartnest_theme_accent', 'emerald');
+                      setThemeMenuOpen(false);
+                    }}
+                  >
+                    <span className="theme-dot" style={{ background: '#059669' }} /> Emerald Cyber
+                  </button>
+                  <button
+                    className={`theme-option-item ${themeAccent === 'sunset' ? 'active' : ''}`}
+                    onClick={() => {
+                      setThemeAccent('sunset');
+                      localStorage.setItem('smartnest_theme_accent', 'sunset');
+                      setThemeMenuOpen(false);
+                    }}
+                  >
+                    <span className="theme-dot" style={{ background: '#f59e0b' }} /> Sunset Cyber
+                  </button>
+                  <button
+                    className={`theme-option-item ${themeAccent === 'amethyst' ? 'active' : ''}`}
+                    onClick={() => {
+                      setThemeAccent('amethyst');
+                      localStorage.setItem('smartnest_theme_accent', 'amethyst');
+                      setThemeMenuOpen(false);
+                    }}
+                  >
+                    <span className="theme-dot" style={{ background: '#8b5cf6' }} /> Neon Amethyst
+                  </button>
+                  <button
+                    className={`theme-option-item ${themeAccent === 'midnight' ? 'active' : ''}`}
+                    onClick={() => {
+                      setThemeAccent('midnight');
+                      localStorage.setItem('smartnest_theme_accent', 'midnight');
+                      setThemeMenuOpen(false);
+                    }}
+                  >
+                    <span className="theme-dot" style={{ background: '#6366f1' }} /> Midnight Cyber 🌙
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               className="landing-toggle-btn outline-button"
               onClick={handleShowLanding}
@@ -370,8 +484,9 @@ function Sidebar({
   const societyName = society?.name || customSoc?.name || 'SmartNest Community';
   const societyInitial = societyName && societyName[0] ? societyName[0].toUpperCase() : 'S';
 
-  const menuItems: { label: string; view: View; icon: IconType }[] = permissions.isResident
-    ? [
+  const menuItems: { label: string; view: View; icon: IconType }[] = useMemo(() => {
+    if (permissions.isResident) {
+      return [
         { label: 'Dashboard', view: 'overview', icon: LayoutDashboard },
         { label: 'Residents Directory', view: 'residents', icon: Users },
         { label: 'Flats & Wings', view: 'flats', icon: Building2 },
@@ -381,18 +496,37 @@ function Sidebar({
         { label: 'Facilities', view: 'facilities', icon: CalendarDays },
         { label: 'My Statement', view: 'reports', icon: FileBarChart },
         { label: 'Profile Settings', view: 'settings', icon: Settings },
-      ]
-    : [
-        { label: 'Dashboard', view: 'overview', icon: LayoutDashboard },
-        { label: 'Residents', view: 'residents', icon: Users },
-        { label: 'Flats', view: 'flats', icon: Building2 },
-        { label: 'Maintenance', view: 'maintenance', icon: WalletCards },
-        { label: 'Complaints', view: 'complaints', icon: MessageSquareWarning },
-        { label: 'Visitors', view: 'visitors', icon: TicketCheck },
-        { label: 'Facilities', view: 'facilities', icon: CalendarDays },
-        { label: 'Reports', view: 'reports', icon: FileBarChart },
-        { label: 'Settings', view: 'settings', icon: Settings },
       ];
+    }
+    if (permissions.isStaff) {
+      return [
+        { label: 'Gate Dashboard', view: 'overview', icon: ShieldCheck },
+        { label: 'Visitor Passes & Log', view: 'visitors', icon: TicketCheck },
+        { label: 'Resident Directory', view: 'residents', icon: Users },
+        { label: 'Flat Occupancy', view: 'flats', icon: Building2 },
+        { label: 'Incidents / Tickets', view: 'complaints', icon: MessageSquareWarning },
+        { label: 'Facility Status', view: 'facilities', icon: CalendarDays },
+        { label: 'Gate Profile', view: 'settings', icon: Settings },
+      ];
+    }
+    return [
+      { label: 'Dashboard', view: 'overview', icon: LayoutDashboard },
+      { label: 'Residents', view: 'residents', icon: Users },
+      { label: 'Flats', view: 'flats', icon: Building2 },
+      { label: 'Maintenance', view: 'maintenance', icon: WalletCards },
+      { label: 'Complaints', view: 'complaints', icon: MessageSquareWarning },
+      { label: 'Visitors', view: 'visitors', icon: TicketCheck },
+      { label: 'Facilities', view: 'facilities', icon: CalendarDays },
+      { label: 'Reports', view: 'reports', icon: FileBarChart },
+      { label: 'Settings', view: 'settings', icon: Settings },
+    ];
+  }, [permissions.isResident, permissions.isStaff]);
+
+  const navSectionLabel = permissions.isResident
+    ? 'MY RESIDENCE'
+    : permissions.isStaff
+      ? 'GATE SECURITY'
+      : 'COMMUNITY PORTAL';
 
   return (
     <>
@@ -414,15 +548,15 @@ function Sidebar({
             <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
               {societyName}
             </strong>
-            <span style={{ textTransform: 'capitalize' }}>{profile?.role ?? 'Resident'} Portal</span>
+            <span style={{ textTransform: 'capitalize' }}>
+              {permissions.isResident ? 'Resident' : permissions.isStaff ? 'Security Guard' : 'Admin'} Portal
+            </span>
           </div>
           <ChevronRight size={14} style={{ color: 'var(--muted-2)' }} />
         </div>
 
         <div className="nav-section">
-          <span className="nav-label">
-            {permissions.isResident ? 'MY RESIDENCE' : 'WORKSPACE'}
-          </span>
+          <span className="nav-label">{navSectionLabel}</span>
           {menuItems.map(({ label, view, icon: NavIcon }) => (
             <button
               key={view}
@@ -439,15 +573,21 @@ function Sidebar({
         <div className="sidebar-bottom">
           <div className="help-card">
             <div className="help-icon">
-              <Sparkles size={15} />
+              {permissions.isStaff ? <Shield size={15} /> : <Sparkles size={15} />}
             </div>
             <strong>
-              {permissions.isResident ? 'Resident Guide' : 'Society OS 2.0'}
+              {permissions.isResident
+                ? 'Resident Guide'
+                : permissions.isStaff
+                  ? 'Gate Terminal 1'
+                  : 'Society OS 2.0'}
             </strong>
             <p>
               {permissions.isResident
                 ? 'Check dues, raise tickets & book amenities'
-                : 'Manage residents, bills, & access controls'}
+                : permissions.isStaff
+                  ? 'Log visitor check-ins & verify resident intercom'
+                  : 'Manage residents, bills, & access controls'}
             </p>
             <button onClick={() => window.dispatchEvent(new CustomEvent('toggle-global-search'))}>
               Search anything (⌘K) <ArrowUpRight size={13} />
@@ -460,7 +600,9 @@ function Sidebar({
             </div>
             <div>
               <strong>{profile?.full_name ?? 'User'}</strong>
-              <span style={{ textTransform: 'capitalize' }}>{profile?.role ?? 'resident'}</span>
+              <span style={{ textTransform: 'capitalize' }}>
+                {profile?.role === 'staff' ? 'Security Guard' : profile?.role ?? 'resident'}
+              </span>
             </div>
             <MoreHorizontal size={18} />
           </div>
@@ -473,6 +615,9 @@ function Sidebar({
 // ============================================================
 // DASHBOARD VIEW
 // ============================================================
+// ============================================================
+// DASHBOARD VIEW
+// ============================================================
 function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const { profile, society } = useAuth();
   const permissions = usePermissions();
@@ -480,6 +625,8 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const { currentResident } = useCurrentResident();
   const { data: collectionData } = useCollectionChart();
   const { data: visitorData } = useVisitorChart();
+  const { visitors, refresh: refreshVisitors } = useVisitors('all');
+  const { success } = useToast();
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const firstName = profile?.full_name.split(' ')[0] ?? 'there';
 
@@ -491,85 +638,268 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     { name: 'Under maintenance', value: stats.maintenance_flats, color: '#f59e0b' },
   ];
 
+  const inPremisesVisitors = visitors.filter((v) => !v.exit_time);
+
+  const handleQuickExit = async (visitorId: string, visitorName: string) => {
+    await dataStore.visitors.checkOut(visitorId);
+    success('Visitor exit recorded', `${visitorName} marked as departed.`);
+    refreshVisitors();
+  };
+
+  // -------------------------------------------------------------
+  // 1. SECURITY / GATE STAFF DASHBOARD VIEW
+  // -------------------------------------------------------------
+  if (permissions.isStaff) {
+    return (
+      <>
+        <div className="page-heading animate-in">
+          <div>
+            <div className="eyebrow">{today.toUpperCase()} • GATE TERMINAL 1</div>
+            <h1>
+              Gate Security Terminal <span className="heading-emoji">🛡️</span>
+            </h1>
+            <p>
+              Live visitor tracking, gate passes, and entry logging for {society?.name ?? 'SmartNest Heights'}.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="outline-button" onClick={() => onNavigate('residents')}>
+              <Users size={16} /> Intercom Directory
+            </button>
+            <button className="primary-button" onClick={() => onNavigate('visitors')}>
+              <Plus size={18} /> Record Gate Entry
+            </button>
+          </div>
+        </div>
+
+        {/* Gate Terminal Status Banner */}
+        <div className="security-gate-banner animate-in">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(255,255,255,0.15)', display: 'grid', placeItems: 'center' }}>
+              <ShieldCheck size={26} color="#34d399" />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>
+                  MAIN GATE SECURITY TERMINAL
+                </span>
+                <span className="gate-status-pill">
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399' }} /> LIVE
+                </span>
+              </div>
+              <small style={{ opacity: 0.85, fontSize: 12 }}>
+                Duty Officer: <strong>{profile?.full_name ?? 'Security Gate Staff'}</strong> · Intercom & Camera Online
+              </small>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 14 }}>
+            <div style={{ padding: '6px 14px', background: 'rgba(255,255,255,0.1)', borderRadius: 8, textAlign: 'center' }}>
+              <span style={{ fontSize: 11, opacity: 0.8, display: 'block' }}>In Premises</span>
+              <strong style={{ fontSize: 16, color: '#34d399' }}>{inPremisesVisitors.length} Active</strong>
+            </div>
+            <div style={{ padding: '6px 14px', background: 'rgba(255,255,255,0.1)', borderRadius: 8, textAlign: 'center' }}>
+              <span style={{ fontSize: 11, opacity: 0.8, display: 'block' }}>Total Today</span>
+              <strong style={{ fontSize: 16, color: '#fff' }}>{stats.visitors_today} Entries</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Security Specific Stat Cards */}
+        <div className="dashboard-grid animate-in delay-1">
+          <StatCard
+            icon={TicketCheck}
+            label="Total visitors today"
+            value={stats.visitors_today}
+            displayValue={stats.visitors_today.toLocaleString()}
+            delta="Gate Check-ins"
+            detail="recorded today"
+            color="blue"
+          />
+          <StatCard
+            icon={ShieldCheck}
+            label="Currently inside society"
+            value={inPremisesVisitors.length}
+            displayValue={inPremisesVisitors.length.toLocaleString()}
+            delta={inPremisesVisitors.length > 0 ? 'Active in premises' : 'None on-site'}
+            detail="awaiting exit"
+            color="teal"
+          />
+          <StatCard
+            icon={Building2}
+            label="Occupied units"
+            value={stats.occupied_flats}
+            displayValue={`${stats.occupied_flats} / ${stats.total_flats}`}
+            delta={`${stats.vacant_flats} vacant`}
+            detail="flats verified"
+            color="gold"
+          />
+          <StatCard
+            icon={MessageSquareWarning}
+            label="Gate & Incident alerts"
+            value={stats.open_complaints}
+            displayValue={stats.open_complaints.toLocaleString()}
+            delta={stats.open_complaints > 0 ? 'Active tickets' : 'All clear'}
+            detail="in progress"
+            color="rose"
+            negative={stats.open_complaints > 0}
+          />
+        </div>
+
+        {/* Security Main Content Grid */}
+        <div className="content-grid animate-in delay-2">
+          {/* Live In-Premises Visitors Table */}
+          <section className="panel" style={{ padding: 20 }}>
+            <div className="panel-header" style={{ marginBottom: 14 }}>
+              <div>
+                <h2 style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ShieldCheck size={18} color="var(--teal)" /> Visitors Currently Inside
+                </h2>
+                <p>Track guests and delivery staff on premises and mark departure.</p>
+              </div>
+              <button className="outline-button" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => onNavigate('visitors')}>
+                View All Logs
+              </button>
+            </div>
+
+            {inPremisesVisitors.length === 0 ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--muted)' }}>
+                <CheckCircle2 size={32} color="var(--teal)" style={{ margin: '0 auto 8px', display: 'block' }} />
+                <strong>No visitors currently inside society</strong>
+                <p style={{ fontSize: 12, marginTop: 4 }}>All logged visitors have departed.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {inPremisesVisitors.slice(0, 5).map((v) => (
+                  <div
+                    key={v.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      background: 'var(--bg-subtle, #f8fafc)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 10,
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div className="avatar blue" style={{ width: 34, height: 34, fontSize: 11 }}>
+                        {getInitials(v.visitor_name)}
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: 13, display: 'block' }}>{v.visitor_name}</strong>
+                        <small style={{ color: 'var(--muted-2)', fontSize: 11 }}>
+                          Visiting: <strong style={{ color: 'var(--ink)' }}>Flat {v.flat_number ?? 'A-102'}</strong> · {v.purpose ?? 'Guest'}
+                        </small>
+                      </div>
+                    </div>
+
+                    <button
+                      className="outline-button"
+                      style={{ fontSize: 12, padding: '4px 10px', color: 'var(--rose)', borderColor: 'rgba(225,29,72,0.3)' }}
+                      onClick={() => handleQuickExit(v.id, v.visitor_name)}
+                      title="Record visitor departure"
+                    >
+                      <LogOut size={13} /> Mark Exit
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Visitor Traffic & Quick Gate Actions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <VisitorCard data={visitorData} total={stats.visitors_today} />
+            <section className="panel" style={{ padding: 18 }}>
+              <div className="panel-header" style={{ marginBottom: 12 }}>
+                <div>
+                  <h2 style={{ fontSize: 15 }}>Quick Security Actions</h2>
+                  <p>Gate operations shortcuts</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <button
+                  className="outline-button"
+                  style={{ justifyContent: 'center', padding: '10px', fontSize: 12 }}
+                  onClick={() => onNavigate('visitors')}
+                >
+                  <TicketCheck size={16} /> New Pass
+                </button>
+                <button
+                  className="outline-button"
+                  style={{ justifyContent: 'center', padding: '10px', fontSize: 12 }}
+                  onClick={() => onNavigate('residents')}
+                >
+                  <Users size={16} /> Call Resident
+                </button>
+                <button
+                  className="outline-button"
+                  style={{ justifyContent: 'center', padding: '10px', fontSize: 12 }}
+                  onClick={() => onNavigate('complaints')}
+                >
+                  <MessageSquareWarning size={16} /> Incident Log
+                </button>
+                <button
+                  className="outline-button"
+                  style={{ justifyContent: 'center', padding: '10px', fontSize: 12 }}
+                  onClick={() => onNavigate('facilities')}
+                >
+                  <CalendarDays size={16} /> Amenities
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // 2. RESIDENT DASHBOARD VIEW
+  // -------------------------------------------------------------
+  if (permissions.isResident) {
+    return (
+      <ResidentDashboardView
+        firstName={firstName}
+        today={today}
+        profile={profile}
+        society={society}
+        currentResident={currentResident}
+        onNavigate={onNavigate}
+        stats={stats}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------
+  // 3. ADMIN DASHBOARD VIEW
+  // -------------------------------------------------------------
   return (
     <>
       <div className="page-heading animate-in">
         <div>
           <div className="eyebrow">{today.toUpperCase()}</div>
-          <h1>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             Good morning, {firstName} <span className="heading-emoji">✦</span>
           </h1>
           <p>
-            {permissions.isResident
-              ? `Welcome to your resident dashboard for Flat ${currentResident?.flat_number ?? 'A-102'} at ${society?.name ?? 'SmartNest Community'}.`
-              : `Here's what's happening across ${society?.name ?? 'your community'} today.`}
+            Here's what's happening across {society?.name ?? 'your community'} today.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          {permissions.isAdmin || permissions.isStaff ? (
-            <>
-              <button className="outline-button" onClick={() => onNavigate('reports')}>
-                <FileBarChart size={16} /> Reports
-              </button>
-              <button className="primary-button" onClick={() => onNavigate('residents')}>
-                <Plus size={18} /> Add resident
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="outline-button" onClick={() => onNavigate('maintenance')}>
-                <WalletCards size={16} /> View My Bills
-              </button>
-              <button className="primary-button" onClick={() => onNavigate('complaints')}>
-                <Plus size={18} /> Raise Complaint
-              </button>
-            </>
-          )}
+          <button className="outline-button" onClick={() => onNavigate('reports')}>
+            <FileBarChart size={16} /> Reports
+          </button>
+          <button className="primary-button" onClick={() => onNavigate('residents')}>
+            <Plus size={18} /> Add resident
+          </button>
         </div>
       </div>
 
-      {permissions.isResident && (
-        <div
-          className="panel animate-in"
-          style={{
-            marginBottom: 24,
-            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(13, 148, 136, 0.06) 100%)',
-            border: '1px solid rgba(37, 99, 235, 0.15)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div className="avatar large violet" style={{ width: 48, height: 48, fontSize: 18 }}>
-                {getInitials(profile?.full_name ?? 'Pooja')}
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  YOUR RESIDENT PROFILE
-                </div>
-                <h3 style={{ margin: '2px 0 0', fontSize: 18 }}>
-                  {profile?.full_name} · Flat {currentResident?.flat_number ?? 'A-102'}
-                </h3>
-                <small style={{ color: 'var(--muted-2)' }}>
-                  Type: Home {currentResident?.type === 'tenant' ? 'Tenant' : 'Owner'} · Phone: {profile?.phone ?? '+91 98403 45678'}
-                </small>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ padding: '8px 14px', background: 'white', borderRadius: 8, border: '1px solid var(--line)', textAlign: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--muted-2)', display: 'block' }}>Maintenance Status</span>
-                <strong style={{ color: 'var(--teal)', fontSize: 14 }}>✓ All Paid (₹0 Due)</strong>
-              </div>
-              <div style={{ padding: '8px 14px', background: 'white', borderRadius: 8, border: '1px solid var(--line)', textAlign: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--muted-2)', display: 'block' }}>Active Requests</span>
-                <strong style={{ color: 'var(--gold)', fontSize: 14 }}>1 in Progress</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* OVERALL COMMUNITY STATS (VISIBLE TO EVERYONE) */}
+      {/* OVERALL COMMUNITY STATS */}
       <div className="dashboard-grid animate-in delay-1">
         <StatCard
           icon={Users}
@@ -600,7 +930,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
         />
         <StatCard
           icon={MessageSquareWarning}
-          label={permissions.isResident ? 'Community requests' : 'Open complaints'}
+          label="Open complaints"
           value={stats.open_complaints}
           displayValue={stats.open_complaints.toLocaleString()}
           delta={stats.open_complaints > 0 ? 'Active tickets' : 'All clear'}
@@ -614,7 +944,6 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
         <CollectionCard
           data={collectionData}
           collectedAmount={stats.collected_amount}
-          isResident={permissions.isResident}
         />
         <OccupancyCard
           occupancy={occupancy}
@@ -625,8 +954,1115 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
 
       <div className="content-grid lower-grid animate-in delay-3">
         <VisitorCard data={visitorData} total={stats.visitors_today} />
-        <ActivityCard onNavigate={onNavigate} stats={stats} isResident={permissions.isResident} />
+        <ActivityCard onNavigate={onNavigate} stats={stats} />
       </div>
+    </>
+  );
+}
+
+function ResidentDashboardView({
+  firstName,
+  today,
+  profile,
+  society,
+  currentResident,
+  onNavigate,
+  stats,
+}: {
+  firstName: string;
+  today: string;
+  profile: any;
+  society: any;
+  currentResident: any;
+  onNavigate: (view: View) => void;
+  stats: DashboardStats;
+}) {
+  const { success, error: toastError } = useToast();
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [showSosModal, setShowSosModal] = useState(false);
+  const [showIntercomModal, setShowIntercomModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [selectedNotice, setSelectedNotice] = useState<{
+    id: string;
+    title: string;
+    date: string;
+    tag: string;
+    priority: string;
+    content: string;
+  } | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Dynamic time-aware greeting
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const TimeIcon = hour < 17 ? Sun : Moon;
+
+  // Active visitor passes
+  const [passes, setPasses] = useState([
+    {
+      id: 'p-1',
+      name: 'Amazon Courier (Delivery #4829)',
+      type: 'Delivery',
+      code: 'AMZ-8492',
+      time: 'Today • 3:30 PM - 5:30 PM',
+      gate: 'Main Gate 1',
+      status: 'Approved',
+    },
+    {
+      id: 'p-2',
+      name: 'Dr. Sameer Mehra (Family Guest)',
+      type: 'Guest',
+      code: 'GST-3914',
+      time: 'Today • 7:00 PM',
+      gate: 'Main Gate 1',
+      status: 'Expected',
+    },
+    {
+      id: 'p-3',
+      name: 'Swiggy Instamart Rider',
+      type: 'Delivery',
+      code: 'SWG-1102',
+      time: 'Today • 1:15 PM',
+      gate: 'Main Gate 2',
+      status: 'Departed',
+    },
+  ]);
+
+  // Form state for creating a new pass
+  const [newPassName, setNewPassName] = useState('');
+  const [newPassType, setNewPassType] = useState('Guest');
+  const [newPassPhone, setNewPassPhone] = useState('');
+  const [newPassVehicle, setNewPassVehicle] = useState('');
+
+  const handleCreatePass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassName.trim()) {
+      toastError('Missing Details', 'Please enter visitor or courier name.');
+      return;
+    }
+    const prefix = newPassType === 'Delivery' ? 'DEL' : newPassType === 'Cab' ? 'CAB' : 'GST';
+    const randCode = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newEntry = {
+      id: `p-${Date.now()}`,
+      name: `${newPassName} ${newPassVehicle ? `(${newPassVehicle})` : ''}`,
+      type: newPassType,
+      code: randCode,
+      time: 'Valid for Next 6 Hours',
+      gate: 'Main Gate 1',
+      status: 'Approved',
+    };
+    setPasses([newEntry, ...passes]);
+    setShowPassModal(false);
+    setNewPassName('');
+    setNewPassPhone('');
+    setNewPassVehicle('');
+    success('Gate Pass Generated!', `Pass code ${randCode} created. Share it with your visitor.`);
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    setCopiedCode(text);
+    success('Copied to clipboard', `${label} (${text}) copied.`);
+    setTimeout(() => setCopiedCode(null), 2500);
+  };
+
+  const notices = [
+    {
+      id: 'n-1',
+      title: 'Annual General Meeting (AGM) 2026',
+      date: 'Sunday, Oct 12 • 10:30 AM',
+      tag: 'High Priority',
+      priority: 'high',
+      content:
+        'The Annual General Meeting of the society will be held at the Community Clubhouse Hall. Agenda includes solar rooftop installation proposals, annual accounts presentation, and festive security guidelines. All homeowners are requested to attend.',
+    },
+    {
+      id: 'n-2',
+      title: 'Overhead Water Tank Cleaning Schedule',
+      date: 'Thursday • 10:00 AM - 1:00 PM',
+      tag: 'Maintenance',
+      priority: 'medium',
+      content:
+        'Routine disinfection of domestic and flushing tanks for Wing A & Wing B. Pressure may be reduced temporarily; secondary reserve tanks will remain operational during maintenance.',
+    },
+    {
+      id: 'n-3',
+      title: 'Diwali Cultural Night & Kids Stalls',
+      date: 'Oct 28 • Registrations Open',
+      tag: 'Community',
+      priority: 'low',
+      content:
+        'Registrations are invited from residents for festive food stalls, cultural dances, and music performances. Contact the Cultural Committee desk or submit via the Resident Portal.',
+    },
+  ];
+
+  const residentName = profile?.full_name ?? 'Aditi Tripathi';
+  const flatNumber = currentResident?.flat_number || 'A-102';
+  const societyName = society?.name || 'Nakshatra Aarambh CHS LTD.';
+  const userPhone = profile?.phone || '+91 77382 73123';
+  const parkingSlot = 'Slot P-14 (Covered)';
+
+  return (
+    <>
+      {/* 1. TOP HEADER & RESIDENT GREETING */}
+      <div className="page-heading animate-in">
+        <div>
+          <div className="eyebrow">{today.toUpperCase()} • RESIDENT LIVING PORTAL</div>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {timeGreeting}, {firstName} <span className="heading-emoji"><TimeIcon size={24} style={{ color: 'var(--primary)' }} /></span>
+          </h1>
+          <p>
+            Welcome to your resident dashboard for Flat {flatNumber} at {societyName}.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="outline-button" onClick={() => onNavigate('maintenance')}>
+            <WalletCards size={16} /> View My Bills
+          </button>
+          <button className="primary-button" onClick={() => onNavigate('complaints')}>
+            <Plus size={18} /> Raise Complaint
+          </button>
+        </div>
+      </div>
+
+      {/* 2. DYNAMIC RESIDENT IDENTITY HERO CARD */}
+      <div className="resident-hero-card animate-in delay-1">
+        <div className="resident-hero-header">
+          <div className="resident-identity-left">
+            <div className="resident-avatar-wrapper">
+              <div className="resident-avatar-circle">
+                {getInitials(residentName)}
+              </div>
+              <div className="resident-online-indicator" title="Resident account active & verified" />
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  RESIDENT LIVING PASS
+                </span>
+                <span className="verified-resident-chip">
+                  <ShieldCheck size={13} /> Verified Resident
+                </span>
+              </div>
+
+              <h2 className="resident-identity-title">
+                {residentName}
+              </h2>
+
+              <div className="resident-meta-tags">
+                <span>
+                  <Building2 size={13} /> Flat {flatNumber} (Wing A, 1st Floor)
+                </span>
+                <span>•</span>
+                <span>
+                  <Home size={13} /> {societyName}
+                </span>
+                <span>•</span>
+                <span>
+                  <UserRound size={13} /> Home {currentResident?.type === 'tenant' ? 'Tenant' : 'Owner'}
+                </span>
+                <span>•</span>
+                <span>
+                  <Car size={13} /> {parkingSlot}
+                </span>
+                <span>•</span>
+                <span>
+                  <Phone size={13} /> {userPhone}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="resident-hero-actions">
+            <div className="resident-status-badge">
+              <span className="badge-label">Maintenance Status</span>
+              <span className="badge-value">
+                <CheckCircle2 size={15} /> All Paid (₹0 Due)
+              </span>
+            </div>
+
+            <button
+              className="resident-intercom-btn"
+              onClick={() => setShowIntercomModal(true)}
+              title="Quick buzz to main gate security"
+            >
+              <Phone size={14} /> Gate 1 Intercom
+            </button>
+
+            <button
+              className="sos-alert-btn"
+              onClick={() => setShowSosModal(true)}
+              title="Send urgent emergency alert to Gate 1 security guard"
+            >
+              <AlertOctagon size={16} /> Emergency SOS
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. ONE-TAP QUICK ACTIONS DOCK */}
+      <div className="resident-quick-actions animate-in delay-1">
+        <div className="quick-action-card" onClick={() => setShowPassModal(true)} role="button" tabIndex={0}>
+          <div className="quick-action-icon blue">
+            <TicketCheck size={20} />
+          </div>
+          <div className="quick-action-text">
+            <strong>Pre-Approve Entry</strong>
+            <small>Guest, Cab, Delivery OTP</small>
+          </div>
+        </div>
+
+        <div className="quick-action-card" onClick={() => onNavigate('maintenance')} role="button" tabIndex={0}>
+          <div className="quick-action-icon teal">
+            <WalletCards size={20} />
+          </div>
+          <div className="quick-action-text">
+            <strong>My Maintenance</strong>
+            <small>Pay dues & tax receipts</small>
+          </div>
+        </div>
+
+        <div className="quick-action-card" onClick={() => onNavigate('complaints')} role="button" tabIndex={0}>
+          <div className="quick-action-icon gold">
+            <MessageSquareWarning size={20} />
+          </div>
+          <div className="quick-action-text">
+            <strong>Helpdesk & Repairs</strong>
+            <small>Plumber, Electrician, Lift</small>
+          </div>
+        </div>
+
+        <div className="quick-action-card" onClick={() => onNavigate('facilities')} role="button" tabIndex={0}>
+          <div className="quick-action-icon violet">
+            <CalendarDays size={20} />
+          </div>
+          <div className="quick-action-text">
+            <strong>Book Amenities</strong>
+            <small>Clubhouse, Pool, Gym</small>
+          </div>
+        </div>
+
+        <div className="quick-action-card" onClick={() => setSelectedNotice(notices[0])} role="button" tabIndex={0}>
+          <div className="quick-action-icon rose">
+            <FileText size={20} />
+          </div>
+          <div className="quick-action-text">
+            <strong>Noticeboard</strong>
+            <small>AGM & Society Circulars</small>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. DYNAMIC RESIDENT STAT CARDS */}
+      <div className="dashboard-grid animate-in delay-2">
+        <StatCard
+          icon={Home}
+          label="My Residence Unit"
+          value={102}
+          displayValue={`Flat ${flatNumber}`}
+          delta="Wing A • 3 BHK"
+          detail={parkingSlot}
+          color="blue"
+        />
+        <StatCard
+          icon={CircleDollarSign}
+          label="Maintenance Status"
+          value={0}
+          displayValue="₹0 Due"
+          delta="100% Up to date"
+          detail="All bills cleared"
+          color="teal"
+        />
+        <StatCard
+          icon={TicketCheck}
+          label="Gate Passes Today"
+          value={passes.filter((p) => p.status !== 'Departed').length}
+          displayValue={`${passes.filter((p) => p.status !== 'Departed').length} Scheduled`}
+          delta="Amazon & Guests"
+          detail="active today"
+          color="gold"
+        />
+        <StatCard
+          icon={MessageSquareWarning}
+          label="Active Service Tickets"
+          value={1}
+          displayValue="1 In Progress"
+          delta="Plumbing inspection"
+          detail="Assigned today"
+          color="rose"
+          negative={true}
+        />
+      </div>
+
+      {/* 5. SPLIT 2-COLUMN RESIDENT LIVING GRID */}
+      <div className="content-grid animate-in delay-2">
+        {/* LEFT COLUMN: ACTIVE GATE PASSES & DELIVERIES */}
+        <section className="panel" style={{ padding: 22 }}>
+          <div className="panel-header" style={{ marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ShieldCheck size={18} color="var(--teal)" /> Live Gate Passes & Deliveries
+              </h2>
+              <p>Pre-approved visitor passes and real-time courier tracking for Flat {flatNumber}.</p>
+            </div>
+            <button
+              className="primary-button"
+              style={{ fontSize: 12, padding: '6px 12px' }}
+              onClick={() => setShowPassModal(true)}
+            >
+              <Plus size={14} /> New Pass
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {passes.map((pass) => (
+              <div key={pass.id} className="visitor-pass-item">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: pass.type === 'Delivery' ? '#eff6ff' : '#fef3c7',
+                      color: pass.type === 'Delivery' ? '#2563eb' : '#b45309',
+                      display: 'grid',
+                      placeItems: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {pass.type === 'Delivery' ? <Truck size={20} /> : <UserRound size={20} />}
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: 13, color: 'var(--navy)' }}>{pass.name}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, fontSize: 11, color: 'var(--muted)' }}>
+                      <span>{pass.time}</span>
+                      <span>•</span>
+                      <span>{pass.gate}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      background: '#f1f5f9',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      padding: '4px 8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <code style={{ fontWeight: 800, fontSize: 12, color: 'var(--ink)', letterSpacing: '0.04em' }}>
+                      {pass.code}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(pass.code, 'Pass Code')}
+                      title="Copy Entry Code"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
+                    >
+                      {copiedCode === pass.code ? <Check size={13} color="var(--teal)" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+
+                  <span
+                    className={`visitor-badge-status ${
+                      pass.status === 'Approved' ? 'active' : pass.status === 'Expected' ? 'pending' : 'departed'
+                    }`}
+                  >
+                    {pass.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--line-2)' }}>
+            <button
+              className="outline-button"
+              style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}
+              onClick={() => onNavigate('visitors')}
+            >
+              View Full Visitor History & Gate Logs <ChevronRight size={14} />
+            </button>
+          </div>
+        </section>
+
+        {/* RIGHT COLUMN: DIGITAL MAINTENANCE RECEIPT */}
+        <section className="panel" style={{ padding: 22 }}>
+          <div className="panel-header" style={{ marginBottom: 14 }}>
+            <div>
+              <h2 style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <WalletCards size={18} color="var(--teal)" /> Verified Maintenance Receipt
+              </h2>
+              <p>Official society tax invoice and statement for Flat {flatNumber}.</p>
+            </div>
+            <span className="receipt-verified-stamp">
+              <CheckCircle2 size={13} /> ALL DUES CLEAR
+            </span>
+          </div>
+
+          <div className="digital-receipt-box">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>
+                  INVOICE NUMBER
+                </span>
+                <strong style={{ display: 'block', fontSize: 14, color: 'var(--ink)', fontFamily: 'monospace' }}>
+                  INV-2026-09-A102
+                </strong>
+                <small style={{ color: 'var(--muted-2)', fontSize: 11 }}>Billing Cycle: September 2026</small>
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>
+                  AMOUNT PAID
+                </span>
+                <strong style={{ display: 'block', fontSize: 18, color: 'var(--teal)', fontWeight: 800 }}>
+                  ₹3,850.00
+                </strong>
+                <small style={{ color: '#16a34a', fontSize: 11, fontWeight: 600 }}>Paid on Sep 05, 2026</small>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8,
+                padding: '10px 12px',
+                background: 'rgba(255, 255, 255, 0.7)',
+                borderRadius: 8,
+                marginBottom: 14,
+                fontSize: 11,
+              }}
+            >
+              <div>
+                <span style={{ color: 'var(--muted-2)', display: 'block' }}>Payment Mode</span>
+                <strong style={{ color: 'var(--ink)' }}>Instant UPI / NetBanking</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--muted-2)', display: 'block' }}>Transaction Ref</span>
+                <strong style={{ color: 'var(--ink)', fontFamily: 'monospace' }}>SBIN-98214</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--muted-2)', display: 'block' }}>Next Billing</span>
+                <strong style={{ color: 'var(--ink)' }}>01 Nov 2026</strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="primary-button"
+                style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                onClick={() => setShowReceiptModal(true)}
+              >
+                <Download size={14} /> Download Tax Receipt
+              </button>
+              <button
+                className="outline-button"
+                style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                onClick={() => onNavigate('maintenance')}
+              >
+                <WalletCards size={14} /> View All Bills
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--line-2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckCircle size={16} color="var(--teal)" />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>No pending penalty or sinking fund arrears</span>
+              </div>
+              <button
+                className="outline-button"
+                style={{ fontSize: 11, padding: '3px 8px' }}
+                onClick={() => copyToClipboard('INV-2026-09-A102', 'Invoice Ref')}
+              >
+                <Copy size={11} /> Copy Ref
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* 6. LOWER CONTENT GRID: AMENITIES & NOTICEBOARD */}
+      <div className="content-grid lower-grid animate-in delay-3">
+        {/* SOCIETY AMENITIES MINI GRID */}
+        <section className="panel" style={{ padding: 22 }}>
+          <div className="panel-header" style={{ marginBottom: 14 }}>
+            <div>
+              <h2 style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CalendarDays size={18} color="var(--blue)" /> Society Amenities & Live Slots
+              </h2>
+              <p>Explore facilities and reserve active recreational slots.</p>
+            </div>
+            <button className="outline-button" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => onNavigate('facilities')}>
+              View All Facilities
+            </button>
+          </div>
+
+          <div className="amenities-mini-grid">
+            <div className="amenity-mini-card">
+              <div>
+                <strong style={{ fontSize: 13, display: 'block' }}>🏊 Swimming Pool</strong>
+                <small style={{ color: 'var(--muted-2)', fontSize: 11 }}>Open • 6:00 AM - 9:00 PM</small>
+                <div style={{ marginTop: 4 }}>
+                  <span className="amenity-status-pill available">Available</span>
+                </div>
+              </div>
+              <button
+                className="outline-button"
+                style={{ fontSize: 11, padding: '4px 8px' }}
+                onClick={() => onNavigate('facilities')}
+              >
+                Book
+              </button>
+            </div>
+
+            <div className="amenity-mini-card">
+              <div>
+                <strong style={{ fontSize: 13, display: 'block' }}>🏋️ Gymnasium & Fitness</strong>
+                <small style={{ color: 'var(--muted-2)', fontSize: 11 }}>Open • 5:00 AM - 11:00 PM</small>
+                <div style={{ marginTop: 4 }}>
+                  <span className="amenity-status-pill available">8 Active</span>
+                </div>
+              </div>
+              <button
+                className="outline-button"
+                style={{ fontSize: 11, padding: '4px 8px' }}
+                onClick={() => onNavigate('facilities')}
+              >
+                Details
+              </button>
+            </div>
+
+            <div className="amenity-mini-card">
+              <div>
+                <strong style={{ fontSize: 13, display: 'block' }}>🏸 Badminton Court</strong>
+                <small style={{ color: 'var(--muted-2)', fontSize: 11 }}>Open • 6:00 AM - 10:00 PM</small>
+                <div style={{ marginTop: 4 }}>
+                  <span className="amenity-status-pill available">2 Slots Left</span>
+                </div>
+              </div>
+              <button
+                className="outline-button"
+                style={{ fontSize: 11, padding: '4px 8px' }}
+                onClick={() => onNavigate('facilities')}
+              >
+                Reserve
+              </button>
+            </div>
+
+            <div className="amenity-mini-card">
+              <div>
+                <strong style={{ fontSize: 13, display: 'block' }}>🏛️ Clubhouse Hall</strong>
+                <small style={{ color: 'var(--muted-2)', fontSize: 11 }}>Capacity: 120 Guests</small>
+                <div style={{ marginTop: 4 }}>
+                  <span className="amenity-status-pill available">Open for Events</span>
+                </div>
+              </div>
+              <button
+                className="outline-button"
+                style={{ fontSize: 11, padding: '4px 8px' }}
+                onClick={() => onNavigate('facilities')}
+              >
+                Inquire
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* NOTICEBOARD & CIRCULARS */}
+        <section className="panel" style={{ padding: 22 }}>
+          <div className="panel-header" style={{ marginBottom: 14 }}>
+            <div>
+              <h2 style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FileText size={18} color="var(--rose)" /> Society Noticeboard & Circulars
+              </h2>
+              <p>Official notices from Managing Committee.</p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {notices.map((notice) => (
+              <div
+                key={notice.id}
+                className="notice-item-row"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setSelectedNotice(notice)}
+                role="button"
+                tabIndex={0}
+              >
+                <div className={`notice-priority-dot ${notice.priority}`} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <strong style={{ fontSize: 13, color: 'var(--navy)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {notice.title}
+                    </strong>
+                    <span style={{ fontSize: 11, color: 'var(--muted-2)', flexShrink: 0 }}>{notice.date}</span>
+                  </div>
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {notice.content}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line-2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+              <span style={{ color: 'var(--muted-2)' }}>Emergency Guard: Ext 101</span>
+              <button
+                className="outline-button"
+                style={{ fontSize: 11, padding: '4px 8px' }}
+                onClick={() => setShowIntercomModal(true)}
+              >
+                <Phone size={12} /> Contact Guard Desk
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL 1: PRE-APPROVE VISITOR PASS */}
+      {/* ------------------------------------------------------------- */}
+      {showPassModal && (
+        <div className="modal-backdrop" onClick={() => setShowPassModal(false)}>
+          <div className="demo-modal" style={{ width: 'min(460px, 100%)', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close icon-button" onClick={() => setShowPassModal(false)} aria-label="Close dialog">
+              <X size={18} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+              >
+                <TicketCheck size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17 }}>Pre-Approve Gate Entry</h3>
+                <small style={{ color: 'var(--muted)' }}>Instant OTP gate pass for Flat {flatNumber}</small>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreatePass}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--navy)' }}>
+                    Entry Type
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {['Guest', 'Delivery', 'Cab'].map((type) => (
+                      <button
+                        type="button"
+                        key={type}
+                        className={newPassType === type ? 'primary-button' : 'outline-button'}
+                        style={{ justifyContent: 'center', fontSize: 12, padding: '8px 12px' }}
+                        onClick={() => setNewPassType(type)}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--navy)' }}>
+                    Visitor or Company Name *
+                  </label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="e.g. Ramesh Kumar / Amazon / Uber"
+                    value={newPassName}
+                    onChange={(e) => setNewPassName(e.target.value)}
+                    required
+                    style={{ width: '100%' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--navy)' }}>
+                      Phone (Optional)
+                    </label>
+                    <input
+                      type="tel"
+                      className="input-field"
+                      placeholder="+91 98400..."
+                      value={newPassPhone}
+                      onChange={(e) => setNewPassPhone(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--navy)' }}>
+                      Vehicle No. (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="e.g. MH-04-1234"
+                      value={newPassVehicle}
+                      onChange={(e) => setNewPassVehicle(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)' }}>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    Gate security will automatically verify this entry code upon arrival.
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                  <button type="button" className="outline-button" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowPassModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="primary-button" style={{ flex: 1, justifyContent: 'center' }}>
+                    Generate Pass OTP
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL 2: EMERGENCY SOS ALERT */}
+      {/* ------------------------------------------------------------- */}
+      {showSosModal && (
+        <div className="modal-backdrop" onClick={() => setShowSosModal(false)}>
+          <div className="demo-modal" style={{ width: 'min(460px, 100%)', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close icon-button" onClick={() => setShowSosModal(false)} aria-label="Close dialog">
+              <X size={18} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 14,
+                  background: '#ffe4e6',
+                  color: '#e11d48',
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+              >
+                <AlertOctagon size={28} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, color: '#e11d48' }}>Emergency SOS Alert</h3>
+                <small style={{ color: 'var(--muted)' }}>Flat {flatNumber} • Nakshatra Aarambh CHS</small>
+              </div>
+            </div>
+
+            <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', padding: 14, borderRadius: 10, marginBottom: 18 }}>
+              <strong style={{ display: 'block', fontSize: 13, color: '#9f1239', marginBottom: 4 }}>
+                🚨 Gate 1 Guard Console Alerted!
+              </strong>
+              <p style={{ margin: 0, fontSize: 12, color: '#881337', lineHeight: 1.5 }}>
+                A priority emergency buzzer notification has been transmitted to Main Gate 1 security guards and the on-duty estate manager.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+              <a
+                href="tel:+919820112345"
+                className="outline-button"
+                style={{ padding: '10px 14px', justifyContent: 'space-between', textDecoration: 'none', color: 'var(--navy)' }}
+              >
+                <span>🛡️ Gate 1 Security Desk</span>
+                <strong>+91 98201 12345 (Ext 101)</strong>
+              </a>
+
+              <a
+                href="tel:+919820267890"
+                className="outline-button"
+                style={{ padding: '10px 14px', justifyContent: 'space-between', textDecoration: 'none', color: 'var(--navy)' }}
+              >
+                <span>👨‍💼 Estate Manager (Rajesh Rao)</span>
+                <strong>+91 98202 67890 (Ext 100)</strong>
+              </a>
+
+              <a
+                href="tel:108"
+                className="outline-button"
+                style={{ padding: '10px 14px', justifyContent: 'space-between', textDecoration: 'none', color: '#e11d48', borderColor: '#fecdd3' }}
+              >
+                <span>🚑 Ambulance Emergency</span>
+                <strong>Dial 108</strong>
+              </a>
+
+              <a
+                href="tel:100"
+                className="outline-button"
+                style={{ padding: '10px 14px', justifyContent: 'space-between', textDecoration: 'none', color: '#2563eb' }}
+              >
+                <span>👮 Police Emergency</span>
+                <strong>Dial 100</strong>
+              </a>
+            </div>
+
+            <button
+              className="primary-button"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={() => {
+                setShowSosModal(false);
+                success('SOS Dismissed', 'Emergency console state cleared.');
+              }}
+            >
+              Acknowledge & Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL 3: GATE INTERCOM */}
+      {/* ------------------------------------------------------------- */}
+      {showIntercomModal && (
+        <div className="modal-backdrop" onClick={() => setShowIntercomModal(false)}>
+          <div className="demo-modal" style={{ width: 'min(440px, 100%)', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close icon-button" onClick={() => setShowIntercomModal(false)} aria-label="Close dialog">
+              <X size={18} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+              >
+                <Phone size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17 }}>Society Gate Intercom</h3>
+                <small style={{ color: 'var(--muted)' }}>Direct guard and administration line</small>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  border: '1px solid var(--line)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <strong style={{ fontSize: 13, display: 'block' }}>Main Gate 1 (Terminal Online)</strong>
+                  <small style={{ color: 'var(--muted-2)' }}>On-Duty Guard: Shankar Singh</small>
+                </div>
+                <button
+                  className="primary-button"
+                  style={{ fontSize: 12, padding: '6px 12px' }}
+                  onClick={() => {
+                    success('Buzzer Sent to Gate 1', 'Guard console is ringing for Flat A-102.');
+                    setShowIntercomModal(false);
+                  }}
+                >
+                  <Phone size={13} /> Buzz Gate 1
+                </button>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  border: '1px solid var(--line)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <strong style={{ fontSize: 13, display: 'block' }}>Rear Gate 2 (Staff & Deliveries)</strong>
+                  <small style={{ color: 'var(--muted-2)' }}>On-Duty Guard: Santosh Patil</small>
+                </div>
+                <button
+                  className="outline-button"
+                  style={{ fontSize: 12, padding: '6px 12px' }}
+                  onClick={() => {
+                    success('Buzzer Sent to Gate 2', 'Gate 2 terminal alerted.');
+                    setShowIntercomModal(false);
+                  }}
+                >
+                  <Phone size={13} /> Buzz Gate 2
+                </button>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  border: '1px solid var(--line)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <strong style={{ fontSize: 13, display: 'block' }}>Society Office / Manager</strong>
+                  <small style={{ color: 'var(--muted-2)' }}>Mr. Rajesh Rao (10 AM - 6 PM)</small>
+                </div>
+                <a
+                  href="tel:+919820267890"
+                  className="outline-button"
+                  style={{ fontSize: 12, padding: '6px 12px', textDecoration: 'none', color: 'var(--navy)' }}
+                >
+                  <Phone size={13} /> Call
+                </a>
+              </div>
+            </div>
+
+            <button className="outline-button" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowIntercomModal(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL 4: FULL PRINTABLE MAINTENANCE RECEIPT */}
+      {/* ------------------------------------------------------------- */}
+      {showReceiptModal && (
+        <div className="modal-backdrop" onClick={() => setShowReceiptModal(false)}>
+          <div className="demo-modal" style={{ width: 'min(520px, 100%)', padding: 28 }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close icon-button" onClick={() => setShowReceiptModal(false)} aria-label="Close dialog">
+              <X size={18} />
+            </button>
+
+            <div style={{ textAlign: 'center', borderBottom: '1px solid var(--line)', paddingBottom: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                MAINTENANCE TAX INVOICE & RECEIPT
+              </div>
+              <h2 style={{ margin: '4px 0 2px', fontSize: 19 }}>{societyName}</h2>
+              <small style={{ color: 'var(--muted-2)' }}>Reg No: BOM/HSG/TC/2021 · Sector 14, Navi Mumbai</small>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, fontSize: 12 }}>
+              <div>
+                <span style={{ color: 'var(--muted-2)', display: 'block' }}>Receipt No:</span>
+                <strong>REC-2026-SEP-0102</strong>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ color: 'var(--muted-2)', display: 'block' }}>Receipt Date:</span>
+                <strong>05 Sep 2026</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--muted-2)', display: 'block' }}>Resident Name:</span>
+                <strong>{residentName}</strong>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ color: 'var(--muted-2)', display: 'block' }}>Flat / Unit:</span>
+                <strong>Flat {flatNumber} (Wing A)</strong>
+              </div>
+            </div>
+
+            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', marginBottom: 16 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--line)' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 10px' }}>Description</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid var(--line-2)' }}>
+                  <td style={{ padding: '8px 10px' }}>Society Maintenance Charges (Sep 2026)</td>
+                  <td style={{ textAlign: 'right', padding: '8px 10px' }}>₹3,200.00</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid var(--line-2)' }}>
+                  <td style={{ padding: '8px 10px' }}>Sinking Fund Contribution</td>
+                  <td style={{ textAlign: 'right', padding: '8px 10px' }}>₹450.00</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid var(--line-2)' }}>
+                  <td style={{ padding: '8px 10px' }}>GST (18% Applicable Component)</td>
+                  <td style={{ textAlign: 'right', padding: '8px 10px' }}>₹200.00</td>
+                </tr>
+                <tr style={{ fontWeight: 800, fontSize: 14, background: '#f0fdf4' }}>
+                  <td style={{ padding: '10px 10px', color: '#166534' }}>Total Paid (Cleared)</td>
+                  <td style={{ textAlign: 'right', padding: '10px 10px', color: '#166534' }}>₹3,850.00</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, fontSize: 11, marginBottom: 18 }}>
+              <div>Mode: <strong>UPI (SBIN-98214)</strong> · Status: <strong style={{ color: '#16a34a' }}>PAID IN FULL</strong></div>
+              <small style={{ color: 'var(--muted-2)', display: 'block', marginTop: 2 }}>This is a computer generated digital receipt.</small>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="primary-button"
+                style={{ flex: 1, justifyContent: 'center' }}
+                onClick={() => {
+                  window.print();
+                }}
+              >
+                <Printer size={15} /> Print / Save PDF
+              </button>
+              <button className="outline-button" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowReceiptModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL 5: NOTICE DETAIL VIEWER */}
+      {/* ------------------------------------------------------------- */}
+      {selectedNotice && (
+        <div className="modal-backdrop" onClick={() => setSelectedNotice(null)}>
+          <div className="demo-modal" style={{ width: 'min(500px, 100%)', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close icon-button" onClick={() => setSelectedNotice(null)} aria-label="Close dialog">
+              <X size={18} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span className={`notice-priority-dot ${selectedNotice.priority}`} />
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>
+                {selectedNotice.tag} • {selectedNotice.date}
+              </span>
+            </div>
+
+            <h3 style={{ fontSize: 18, margin: '0 0 14px', color: 'var(--navy)' }}>{selectedNotice.title}</h3>
+            <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink)', marginBottom: 20 }}>{selectedNotice.content}</p>
+
+            <button className="primary-button" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setSelectedNotice(null)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -651,7 +2087,7 @@ function StatCard({
   negative?: boolean;
 }) {
   const animated = useCountUp(value);
-  const shown = value > 50 ? animated.toLocaleString() : displayValue;
+  const shown = displayValue ? displayValue : (value > 50 ? animated.toLocaleString() : value.toString());
 
   return (
     <div className="stat-card">
@@ -888,7 +2324,7 @@ function ManagementView({ view, onNavigate }: { view: View; onNavigate: (view: V
 
   const permissions = usePermissions();
 
-  const adminConfig: Record<Exclude<View, 'overview' | 'settings'>, { title: string; description: string; icon: IconType; action: string }> = {
+  const adminConfig: Record<Exclude<View, 'overview' | 'settings' | 'api'>, { title: string; description: string; icon: IconType; action: string }> = {
     residents: { title: 'Residents', description: 'Manage your community directory and resident details.', icon: Users, action: 'Add resident' },
     flats: { title: 'Flats', description: 'See occupancy, ownership and inventory across every wing.', icon: Building2, action: 'Add flat' },
     maintenance: { title: 'Maintenance', description: 'Keep collections, bills and payment history on track.', icon: WalletCards, action: 'Generate bill' },
@@ -898,7 +2334,17 @@ function ManagementView({ view, onNavigate }: { view: View; onNavigate: (view: V
     reports: { title: 'Reports', description: 'Turn community data into useful decisions.', icon: FileBarChart, action: 'Export report' },
   };
 
-  const residentConfig: Record<Exclude<View, 'overview' | 'settings'>, { title: string; description: string; icon: IconType; action: string }> = {
+  const staffConfig: Record<Exclude<View, 'overview' | 'settings' | 'api'>, { title: string; description: string; icon: IconType; action: string }> = {
+    visitors: { title: 'Gate Passes & Visitor Log', description: 'Log visitor check-ins, record visitor photos, and mark exits.', icon: TicketCheck, action: 'Record visitor' },
+    residents: { title: 'Resident Directory & Intercom', description: 'Look up resident contact info to confirm visitor entry at the gate.', icon: Users, action: '' },
+    flats: { title: 'Flat Occupancy Directory', description: 'Verify occupied and vacant units across all blocks.', icon: Building2, action: '' },
+    complaints: { title: 'Security & Maintenance Incidents', description: 'Log security/gate issues and update progress status.', icon: MessageSquareWarning, action: 'Log incident' },
+    facilities: { title: 'Facility Gate Status', description: 'Check opening hours and occupancy of clubhouse, pool, and courts.', icon: CalendarDays, action: '' },
+    maintenance: { title: 'Maintenance Accounts (Restricted)', description: 'Financial billing records are confidential to Society Admins and Residents.', icon: WalletCards, action: '' },
+    reports: { title: 'Security & Gate Reports', description: 'Review gate visitor logs and entry traffic data.', icon: FileBarChart, action: '' },
+  };
+
+  const residentConfig: Record<Exclude<View, 'overview' | 'settings' | 'api'>, { title: string; description: string; icon: IconType; action: string }> = {
     residents: { title: 'Residents Directory', description: 'Look up your neighbors and community members.', icon: Users, action: '' },
     flats: { title: 'Flats & Wings', description: 'Community unit directory across all blocks.', icon: Building2, action: '' },
     maintenance: { title: 'My Maintenance Bills', description: 'View and download payment receipts for your flat.', icon: WalletCards, action: '' },
@@ -910,12 +2356,14 @@ function ManagementView({ view, onNavigate }: { view: View; onNavigate: (view: V
 
   const current =
     (permissions.isResident
-      ? residentConfig[view as Exclude<View, 'overview' | 'settings'>]
-      : adminConfig[view as Exclude<View, 'overview' | 'settings'>]) || adminConfig.residents;
+      ? residentConfig[view as Exclude<View, 'overview' | 'settings' | 'api'>]
+      : permissions.isStaff
+        ? staffConfig[view as Exclude<View, 'overview' | 'settings' | 'api'>]
+        : adminConfig[view as Exclude<View, 'overview' | 'settings' | 'api'>]) || adminConfig.residents;
 
   const canWrite =
     permissions.isAdmin ||
-    (permissions.isStaff && ['residents', 'complaints', 'visitors', 'maintenance'].includes(view)) ||
+    (permissions.isStaff && ['visitors', 'complaints'].includes(view)) ||
     (permissions.isResident && ['complaints', 'visitors'].includes(view));
 
   const Icon = current?.icon || LayoutDashboard;
@@ -925,7 +2373,7 @@ function ManagementView({ view, onNavigate }: { view: View; onNavigate: (view: V
       <div className="page-heading">
         <div>
           <div className="eyebrow">
-            {permissions.isResident ? 'MY RESIDENCE' : 'WORKSPACE'} / {current.title.toUpperCase()}
+            {permissions.isResident ? 'MY RESIDENCE' : 'PORTAL'} / {current.title.toUpperCase()}
           </div>
           <h1>
             <span className="heading-icon">
@@ -1049,8 +2497,8 @@ function ResidentsView() {
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               RESIDENT ONBOARDING &amp; JOIN KEY
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dark)', marginTop: 2 }}>
-              Share Society Code <code style={{ background: '#fff', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: 6, color: 'var(--blue)', fontWeight: 800 }}>{societyCode}</code> with your residents to let them register, or add them manually below.
+            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>
+              Share Society Code <code style={{ border: '1px solid var(--line)', padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>{societyCode}</code> with your residents to let them register, or add them manually below.
             </div>
           </div>
 
@@ -1059,7 +2507,7 @@ function ResidentsView() {
               type="button"
               className="outline-button"
               onClick={copySocietyCode}
-              style={{ fontSize: 13, background: 'white' }}
+              style={{ fontSize: 13 }}
             >
               {copiedCode ? <Check size={14} /> : <Copy size={14} />} {copiedCode ? 'Code Copied!' : 'Copy Code'}
             </button>
@@ -1078,157 +2526,157 @@ function ResidentsView() {
       <section className="panel table-panel">
         <div className="table-toolbar">
           <label className="search-box table-search">
-          <Search size={17} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resident name, flat or block..." />
-        </label>
-        <div className="toolbar-actions" style={{ flexWrap: 'wrap' }}>
-          <select
-            value={typeFilter}
-            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'white', fontSize: 13 }}
-          >
-            <option value="all">All Types</option>
-            <option value="owner">Owners</option>
-            <option value="tenant">Tenants</option>
-          </select>
-          {!isResident && (
+            <Search size={17} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resident name, flat or block..." />
+          </label>
+          <div className="toolbar-actions" style={{ flexWrap: 'wrap' }}>
             <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'white', fontSize: 13 }}
+              value={typeFilter}
+              onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+              style={{ padding: '6px 10px', borderRadius: 8, fontSize: 13 }}
             >
-              <option value="all">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="pending">Pending</option>
+              <option value="all">All Types</option>
+              <option value="owner">Owners</option>
+              <option value="tenant">Tenants</option>
             </select>
-          )}
-          {!isResident && (
-            <button
-              className="outline-button"
-              onClick={() => csvDownload('residents-directory.csv', residents as Record<string, unknown>[])}
-            >
-              <Download size={15} /> Export CSV
-            </button>
-          )}
+            {!isResident && (
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                style={{ padding: '6px 10px', borderRadius: 8, fontSize: 13 }}
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="pending">Pending</option>
+              </select>
+            )}
+            {!isResident && (
+              <button
+                className="outline-button"
+                onClick={() => csvDownload('residents-directory.csv', residents as Record<string, unknown>[])}
+              >
+                <Download size={15} /> Export CSV
+              </button>
+            )}
+          </div>
         </div>
-      </div>
 
-      {loading ? (
-        <div style={{ padding: 40, textAlign: 'center' }}>
-          <Loader2 size={24} className="spin" style={{ color: 'var(--blue)' }} />
-        </div>
-      ) : residents.length === 0 ? (
-        <EmptyState icon={Users} title="No residents found" description="Try adjusting your search filters." />
-      ) : (
-        <>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Resident</th>
-                  <th>Flat</th>
-                  <th>Contact</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  {permissions.isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {residents.map((resident) => (
-                  <tr key={resident.id}>
-                    <td>
-                      <div className="table-person">
-                        <div className={`avatar ${resident.avatar_color || 'blue'}`}>
-                          {getInitials(resident.full_name)}
-                        </div>
-                        <div>
-                          <strong>{resident.full_name}</strong>
-                          {permissions.isAdmin && resident.email && (
-                            <small style={{ display: 'block', color: 'var(--muted-2)' }}>{resident.email}</small>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td><strong>{resident.flat_number ?? '—'}</strong></td>
-                    <td className="muted-cell">
-                      {permissions.isAdmin || permissions.isStaff ? resident.phone ?? '—' : 'Verified Resident'}
-                    </td>
-                    <td>
-                      <span className="type-pill" style={{ textTransform: 'capitalize' }}>
-                        {resident.type}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`status-pill ${resident.status}`}>
-                        <i />
-                        {resident.status === 'active' ? 'Active' : 'Pending'}
-                      </span>
-                    </td>
-                    {permissions.isAdmin && (
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <Loader2 size={24} className="spin" style={{ color: 'var(--blue)' }} />
+          </div>
+        ) : residents.length === 0 ? (
+          <EmptyState icon={Users} title="No residents found" description="Try adjusting your search filters." />
+        ) : (
+          <>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Resident</th>
+                    <th>Flat</th>
+                    <th>Contact</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    {permissions.isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {residents.map((resident) => (
+                    <tr key={resident.id}>
                       <td>
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                          <button
-                            className="icon-button"
-                            title="Edit resident"
-                            onClick={() => setEditResidentData(resident)}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            className="icon-button"
-                            title="Delete resident"
-                            style={{ color: '#e11d48' }}
-                            onClick={() => setDeleteResidentData(resident)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                        <div className="table-person">
+                          <div className={`avatar ${resident.avatar_color || 'blue'}`}>
+                            {getInitials(resident.full_name)}
+                          </div>
+                          <div>
+                            <strong>{resident.full_name}</strong>
+                            {permissions.isAdmin && resident.email && (
+                              <small style={{ display: 'block', color: 'var(--muted-2)' }}>{resident.email}</small>
+                            )}
+                          </div>
                         </div>
                       </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="table-footer">
-            <span>Showing {residents.length} of {total.toLocaleString()} residents</span>
-            <div>
-              {page > 1 && (
-                <button className="page-button" aria-label="Previous page" onClick={() => setPage(page - 1)}>
-                  <ChevronLeft size={15} />
-                </button>
-              )}
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
-                <button key={p} className={`page-button ${p === page ? 'active' : ''}`} onClick={() => setPage(p)}>
-                  {p}
-                </button>
-              ))}
-              {page < totalPages && (
-                <button className="page-button" aria-label="Next page" onClick={() => setPage(page + 1)}>
-                  <ChevronRight size={15} />
-                </button>
-              )}
+                      <td><strong>{resident.flat_number ?? '—'}</strong></td>
+                      <td className="muted-cell">
+                        {permissions.isAdmin || permissions.isStaff ? resident.phone ?? '—' : 'Verified Resident'}
+                      </td>
+                      <td>
+                        <span className="type-pill" style={{ textTransform: 'capitalize' }}>
+                          {resident.type}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-pill ${resident.status}`}>
+                          <i />
+                          {resident.status === 'active' ? 'Active' : 'Pending'}
+                        </span>
+                      </td>
+                      {permissions.isAdmin && (
+                        <td>
+                          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                            <button
+                              className="icon-button"
+                              title="Edit resident"
+                              onClick={() => setEditResidentData(resident)}
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              className="icon-button"
+                              title="Delete resident"
+                              style={{ color: '#e11d48' }}
+                              onClick={() => setDeleteResidentData(resident)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </>
-      )}
 
-      {showAdd && <AddResidentModal onClose={() => setShowAdd(false)} onSaved={refresh} />}
-      {editResidentData && (
-        <EditResidentModal resident={editResidentData} onClose={() => setEditResidentData(null)} onSaved={refresh} />
-      )}
+            <div className="table-footer">
+              <span>Showing {residents.length} of {total.toLocaleString()} residents</span>
+              <div>
+                {page > 1 && (
+                  <button className="page-button" aria-label="Previous page" onClick={() => setPage(page - 1)}>
+                    <ChevronLeft size={15} />
+                  </button>
+                )}
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
+                  <button key={p} className={`page-button ${p === page ? 'active' : ''}`} onClick={() => setPage(p)}>
+                    {p}
+                  </button>
+                ))}
+                {page < totalPages && (
+                  <button className="page-button" aria-label="Next page" onClick={() => setPage(page + 1)}>
+                    <ChevronRight size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
-      <ConfirmModal
-        isOpen={!!deleteResidentData}
-        title="Delete Resident"
-        description={`Are you sure you want to remove ${deleteResidentData?.full_name}? This will unlink their flat profile.`}
-        confirmLabel="Delete"
-        busy={deleteBusy}
-        onConfirm={handleDelete}
-        onClose={() => setDeleteResidentData(null)}
-      />
-    </section>
+        {showAdd && <AddResidentModal onClose={() => setShowAdd(false)} onSaved={refresh} />}
+        {editResidentData && (
+          <EditResidentModal resident={editResidentData} onClose={() => setEditResidentData(null)} onSaved={refresh} />
+        )}
+
+        <ConfirmModal
+          isOpen={!!deleteResidentData}
+          title="Delete Resident"
+          description={`Are you sure you want to remove ${deleteResidentData?.full_name}? This will unlink their flat profile.`}
+          confirmLabel="Delete"
+          busy={deleteBusy}
+          onConfirm={handleDelete}
+          onClose={() => setDeleteResidentData(null)}
+        />
+      </section>
     </>
   );
 }
@@ -1894,6 +3342,25 @@ function MaintenanceView() {
 
   if (loading || !stats) return <LoadingState />;
 
+  if (permissions.isStaff) {
+    return (
+      <section className="panel" style={{ padding: 48, textAlign: 'center', maxWidth: 600, margin: '40px auto' }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(13, 148, 136, 0.12)', color: 'var(--teal)', display: 'grid', placeItems: 'center', margin: '0 auto 20px' }}>
+          <Shield size={32} />
+        </div>
+        <h2 style={{ fontSize: 20, marginBottom: 8 }}>Financial Accounts Restricted</h2>
+        <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
+          Society maintenance billing statements, dues collection data, and invoice records are confidential and restricted to Society Administrators and respective Flat Residents.
+        </p>
+        <div style={{ display: 'inline-flex', gap: 12 }}>
+          <button className="primary-button" onClick={() => window.dispatchEvent(new CustomEvent('navigate-view', { detail: 'visitors' }))}>
+            <TicketCheck size={16} /> Open Gate Passes & Log
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   const handleMarkPaid = async (id: string) => {
     const { error } = await dataStore.bills.markPaid(id);
     if (!error) {
@@ -2381,7 +3848,7 @@ function ComplaintsView() {
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'white', fontSize: 13 }}
+            style={{ padding: '6px 10px', borderRadius: 8, fontSize: 13 }}
           >
             <option value="all">All Priorities</option>
             <option value="high">High Priority</option>
@@ -2703,8 +4170,8 @@ function VisitorsView() {
 
           <label className="auth-field">
             <span>Contact Phone</span>
-            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--line)', borderRadius: 'var(--radius-xs)', overflow: 'hidden', background: '#fff' }}>
-              <span style={{ padding: '0 10px', background: 'var(--bg-subtle, #f8fafc)', borderRight: '1px solid var(--line)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted, #475569)', userSelect: 'none' }}>
+            <div className="phone-prefix-input">
+              <span className="phone-flag">
                 🇮🇳 +91
               </span>
               <input
@@ -2712,7 +4179,6 @@ function VisitorsView() {
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                 placeholder="9876543210"
                 maxLength={10}
-                style={{ border: 'none', borderRadius: 0, outline: 'none', flex: 1, padding: '8px 12px' }}
               />
             </div>
           </label>
@@ -2954,7 +4420,7 @@ function FacilitiesView() {
           </div>
         ) : (
           facilities.map((facility) => (
-            <article className="facility-card" key={facility.id} style={{ overflow: 'hidden', borderRadius: 16, border: '1px solid var(--line)', background: '#fff' }}>
+            <article className="facility-card" key={facility.id}>
               <div style={{ height: 160, width: '100%', position: 'relative', overflow: 'hidden' }}>
                 <img
                   src={getFacilityPhoto(facility.name)}
@@ -2979,20 +4445,20 @@ function FacilitiesView() {
                   {facility.status}
                 </span>
               </div>
-              <div className="facility-card-copy" style={{ padding: '16px 20px 20px' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase' }}>AMENITY</span>
-                <h2 style={{ fontSize: 18, margin: '2px 0 6px', fontWeight: 700 }}>{facility.name}</h2>
-                <p style={{ margin: '4px 0 12px', fontSize: 13, color: 'var(--muted)', minHeight: 36, lineHeight: 1.4 }}>
+              <div className="facility-card-copy">
+                <span className="amenity-tag">AMENITY</span>
+                <h2>{facility.name}</h2>
+                <p>
                   {facility.description || 'Community shared space available for resident reservation.'}
                 </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--dark)', fontWeight: 600, marginBottom: 14 }}>
-                  <Clock3 size={14} style={{ color: 'var(--teal)' }} />
+                <div className="facility-time">
+                  <Clock3 size={14} />
                   <span>{facility.open_until ? `Open until ${facility.open_until}` : 'Open 24/7'}</span>
                 </div>
-                <div className="facility-bottom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-                  <small style={{ fontSize: 12, color: 'var(--muted-2)' }}>{bookings[facility.id] ?? 0} active bookings</small>
+                <div className="facility-bottom">
+                  <small className="facility-bookings">{bookings[facility.id] ?? 0} active bookings</small>
                   <button className="outline-button" onClick={() => setManageFacility(facility)} style={{ fontSize: 12, padding: '6px 14px' }}>
-                    Book & Manage <ArrowUpRight size={14} />
+                    Book &amp; Manage <ArrowUpRight size={14} />
                   </button>
                 </div>
               </div>
@@ -3275,7 +4741,7 @@ function ReportsView({ onNavigate }: { onNavigate: (view: View) => void }) {
   const permissions = usePermissions();
   const { currentResident } = useCurrentResident();
   const { success } = useToast();
-  const [selectedReport, setSelectedReport] = useState<string>('bills');
+  const [selectedReport, setSelectedReport] = useState<string>(() => (permissions.isStaff ? 'visitors' : 'bills'));
   const [busy, setBusy] = useState(false);
   const [dataPreview, setDataPreview] = useState<Record<string, unknown>[]>([]);
 
@@ -3287,13 +4753,19 @@ function ReportsView({ onNavigate }: { onNavigate: (view: View) => void }) {
     { id: 'facilities', title: 'Facility Bookings', description: 'Amenity reservations, utilization rate, and scheduling.', icon: CalendarDays, table: 'facility_bookings' },
   ], []);
 
+  const staffReports: ReportItem[] = useMemo(() => [
+    { id: 'visitors', title: 'Visitor Gate Log', description: 'Security gate check-in logs, guest passes, and entry patterns.', icon: TicketCheck, table: 'visitors' },
+    { id: 'complaints', title: 'Security & Maintenance Incidents', description: 'Incident reports, lift issues, and repair statuses.', icon: MessageSquareWarning, table: 'complaints' },
+    { id: 'facilities', title: 'Facility Gate Status', description: 'Amenity reservations, utilization rate, and scheduling.', icon: CalendarDays, table: 'facility_bookings' },
+  ], []);
+
   const residentReports: ReportItem[] = useMemo(() => [
     { id: 'bills', title: 'My Flat Invoices & Receipts', description: 'Monthly dues, paid timestamps, and official receipts.', icon: CircleDollarSign, table: 'maintenance_bills' },
     { id: 'complaints', title: 'My Maintenance Tickets', description: 'Status and history of maintenance requests submitted by you.', icon: MessageSquareWarning, table: 'complaints' },
     { id: 'visitors', title: 'My Guest Pass Logs', description: 'History of visitor check-ins registered for your flat.', icon: TicketCheck, table: 'visitors' },
   ], []);
 
-  const reportsConfig = permissions.isResident ? residentReports : adminReports;
+  const reportsConfig = permissions.isResident ? residentReports : permissions.isStaff ? staffReports : adminReports;
 
   const loadPreview = useCallback(async (table: string) => {
     setBusy(true);
@@ -3563,10 +5035,10 @@ function SettingsView() {
     const current = m.permissions && m.permissions.length > 0
       ? m.permissions
       : m.role === 'admin'
-      ? ['all', 'gate_entry', 'visitor_logs', 'deliveries', 'complaints', 'facilities', 'bills']
-      : m.role === 'staff'
-      ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
-      : ['complaints', 'facilities', 'bills'];
+        ? ['all', 'gate_entry', 'visitor_logs', 'deliveries', 'complaints', 'facilities', 'bills']
+        : m.role === 'staff'
+          ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
+          : ['complaints', 'facilities', 'bills'];
     setActivePerms(current);
     setEditPermsModalOpen(true);
   };
@@ -3665,8 +5137,8 @@ function SettingsView() {
 
             <label className="auth-field">
               <span>Contact Phone</span>
-              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--line)', borderRadius: 'var(--radius-xs)', overflow: 'hidden', background: '#fff' }}>
-                <span style={{ padding: '0 10px', background: 'var(--bg-subtle, #f8fafc)', borderRight: '1px solid var(--line)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted, #475569)', userSelect: 'none' }}>
+              <div className="phone-prefix-input">
+                <span className="phone-flag">
                   🇮🇳 +91
                 </span>
                 <input
@@ -3677,7 +5149,6 @@ function SettingsView() {
                   }}
                   placeholder="9876543210"
                   maxLength={10}
-                  style={{ border: 'none', borderRadius: 0, outline: 'none', flex: 1, padding: '8px 12px' }}
                 />
               </div>
             </label>
@@ -3780,8 +5251,8 @@ function SettingsView() {
                       m.role === 'admin'
                         ? ['all']
                         : m.role === 'staff'
-                        ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
-                        : ['complaints', 'facilities', 'bills']
+                          ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
+                          : ['complaints', 'facilities', 'bills']
                     );
                     return (
                       <tr key={m.id}>
@@ -3807,7 +5278,7 @@ function SettingsView() {
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 300 }}>
                             {m.role === 'admin' ? (
                               <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-                                ⚡ Full ERP &amp; Gate Authority
+                                ⚡ Full Management &amp; Gate Authority
                               </span>
                             ) : perms.length === 0 ? (
                               <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>No operational permissions</span>
@@ -3829,9 +5300,10 @@ function SettingsView() {
                           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
                             <button
                               type="button"
+                              className="outline-button"
                               onClick={() => handleOpenEditPerms(m)}
                               title="Configure Granular Permissions"
-                              style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#ffffff', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                              style={{ padding: '5px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
                             >
                               <ShieldCheck size={13} style={{ color: '#0d9488' }} /> Permissions
                             </button>
@@ -3897,8 +5369,8 @@ function SettingsView() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <label className="auth-field">
                   <span>Contact Phone</span>
-                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--line)', borderRadius: 'var(--radius-xs)', overflow: 'hidden', background: '#fff' }}>
-                    <span style={{ padding: '0 8px', background: 'var(--bg-subtle, #f8fafc)', borderRight: '1px solid var(--line)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted, #475569)', userSelect: 'none' }}>
+                  <div className="phone-prefix-input">
+                    <span className="phone-flag" style={{ padding: '0 8px', fontSize: 12 }}>
                       🇮🇳 +91
                     </span>
                     <input
@@ -3909,7 +5381,6 @@ function SettingsView() {
                         setNewMemberPhone(digits ? `+91 ${digits}` : '');
                       }}
                       maxLength={10}
-                      style={{ border: 'none', borderRadius: 0, outline: 'none', flex: 1, padding: '8px 10px' }}
                     />
                   </div>
                 </label>
@@ -3919,7 +5390,7 @@ function SettingsView() {
                   <select
                     value={newMemberRole}
                     onChange={(e) => setNewMemberRole(e.target.value as Role)}
-                    style={{ height: 42, padding: '0 12px', borderRadius: 8, border: '1px solid var(--line)', background: '#fff' }}
+                    style={{ height: 42, padding: '0 12px', borderRadius: 8 }}
                   >
                     <option value="staff">Security Guard / Staff</option>
                     <option value="admin">Society Admin</option>

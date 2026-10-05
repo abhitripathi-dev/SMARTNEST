@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { api } from './api';
 import type {
   Flat,
   Resident,
@@ -12,7 +12,7 @@ import type {
   Role,
   Society,
   Profile,
-} from './supabase';
+} from './types';
 
 export const DEMO_SOCIETY_ID = 'e7b1a234-5678-4321-8765-abcdef123456';
 
@@ -109,30 +109,6 @@ const INITIAL_MEMBERS: SocietyMember[] = [
   { id: 'usr-demo-resident-003', society_id: DEMO_SOCIETY_ID, full_name: 'Resident Member', phone: '+91 98403 45678', email: 'resident@smartnest.community', role: 'resident', permissions: ['complaints', 'facilities', 'bills'], avatar_color: 'violet', created_at: '2026-01-10T00:00:00Z' },
 ];
 
-// Self-healing cleaner for legacy demo entries in user browser local storage
-(function sanitizeStores() {
-  try {
-    if (typeof window === 'undefined') return;
-    const activeSocId = getActiveSocietyId();
-    if (activeSocId !== DEMO_SOCIETY_ID) {
-      // Clean members
-      const rawMem = localStorage.getItem('society_db_members');
-      if (rawMem) {
-        const mems = JSON.parse(rawMem);
-        if (Array.isArray(mems)) {
-          const cleaned = mems.filter((m: SocietyMember) => {
-            if (m.id === 'usr-demo-admin-001' || m.id === 'usr-demo-staff-002' || m.id === 'usr-demo-resident-003') return false;
-            if (m.full_name === 'Vikram Mehta' || m.full_name === 'Rajesh Sharma' || m.full_name === 'Pooja Iyer') return false;
-            if (m.society_id && m.society_id !== activeSocId) return false;
-            return true;
-          });
-          localStorage.setItem('society_db_members', JSON.stringify(cleaned));
-        }
-      }
-    }
-  } catch {}
-})();
-
 // ============================================================
 // STORAGE HELPERS & REACTIVE BUS
 // ============================================================
@@ -149,10 +125,14 @@ export function getLocal<T>(key: string, fallback: T): T {
   }
 }
 
-export function setLocal<T>(key: string, value: T): void {
+export function setLocal<T>(key: string, value: T, notify = true): void {
   try {
-    localStorage.setItem(`society_db_${key}`, JSON.stringify(value));
-    notifyDataChange(key);
+    const serialized = JSON.stringify(value);
+    const existing = localStorage.getItem(`society_db_${key}`);
+    localStorage.setItem(`society_db_${key}`, serialized);
+    if (notify && existing !== serialized) {
+      notifyDataChange(key);
+    }
   } catch (e) {
     console.warn('Storage set error:', e);
   }
@@ -191,7 +171,7 @@ export const dataStore = {
     const allFlats = getLocal<Flat[]>('flats', INITIAL_FLATS);
     setLocal('flats', [...flats, ...allFlats.filter((f) => f.society_id !== socId)]);
 
-    // 3. Persist Admin Member for this society (isolate from demo accounts)
+    // 3. Persist Admin Member for this society
     const allMembers = getLocal<SocietyMember[]>('members', []);
     const adminMember: SocietyMember = {
       id: adminProfile.id,
@@ -209,7 +189,7 @@ export const dataStore = {
     );
     setLocal('members', [adminMember, ...filteredOtherMembers]);
 
-    // 4. Create first resident record for the admin in the first flat if flats exist
+    // 4. Create first resident record for the admin
     const allResidents = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
     const newResidents: (Resident & { flat_number: string | null })[] = [];
     if (flats.length > 0) {
@@ -232,7 +212,7 @@ export const dataStore = {
     }
     setLocal('residents', [...newResidents, ...allResidents.filter((r) => r.society_id !== socId)]);
 
-    // 5. Default Facilities for this society
+    // 5. Default Facilities
     const defaultFacilities: Facility[] = [
       {
         id: `fac-${socId}-1`,
@@ -320,35 +300,95 @@ export const dataStore = {
           });
         }
       });
+
+      // Check society_custom_registered in localStorage
+      try {
+        const customRaw = localStorage.getItem('society_custom_registered');
+        if (customRaw) {
+          const custom = JSON.parse(customRaw);
+          if (custom.society && !combined.some((s) => s.id === custom.society.id)) {
+            combined.push({
+              ...custom.society,
+              code: custom.societyCode || custom.society.code || null,
+            });
+          }
+        }
+      } catch {}
+
+      if (!combined.some((s) => s.id === DEMO_SOCIETY_ID)) {
+        combined.unshift({
+          id: DEMO_SOCIETY_ID,
+          name: 'SmartNest Heights (Demo)',
+          address: 'Tower 4, Palm Avenue, Sector 54, Mumbai',
+          code: 'SMARTNEST-DEMO',
+          created_by: 'usr-demo-admin-001',
+          created_at: '2026-01-01T00:00:00Z',
+        });
+      }
+
+      // Background sync from backend if available
+      api.societies
+        .list()
+        .then((remoteList) => {
+          if (Array.isArray(remoteList) && remoteList.length > 0) {
+            const current = getLocal<Society[]>('societies', []);
+            const merged = [...current];
+            remoteList.forEach((r) => {
+              if (!merged.some((m) => m.id === r.id)) merged.push(r);
+            });
+            setLocal('societies', merged, false);
+          }
+        })
+        .catch(() => {});
+
       return combined;
     },
 
-    getByCodeOrName: async (query: string): Promise<Society | null> => {
-      const q = query.trim().toUpperCase();
+    getById: async (id: string): Promise<Society | null> => {
       const list = await dataStore.societies.list();
-      const found = list.find(
-        (s) =>
-          (s.code && s.code.toUpperCase() === q) ||
-          s.id.toUpperCase() === q ||
-          s.name.toUpperCase() === query.trim().toUpperCase() ||
-          s.id.substring(0, 8).toUpperCase() === q
-      );
-      if (found) return found;
+      const local = list.find((s) => s.id === id) || null;
+      if (local) return local;
+      try {
+        const remote = await api.societies.getByCodeOrId(id);
+        if (remote) return remote;
+      } catch {}
+      return null;
+    },
 
-      const accounts = getLocal<Record<string, unknown>[]>('accounts', []);
-      const matchedAccount = accounts.find(
-        (a) =>
-          ((a.societyCode as string)?.toUpperCase() === q) ||
-          ((a.societyId as string)?.toUpperCase() === q) ||
-          ((a.society as Society | undefined)?.name.toUpperCase() === query.trim().toUpperCase())
+    getByCode: async (code: string): Promise<Society | null> => {
+      const clean = code.trim().toUpperCase();
+      const list = await dataStore.societies.list();
+      const local = list.find((s) => s.code?.toUpperCase() === clean || s.id.substring(0, 8).toUpperCase() === clean) || null;
+      if (local) return local;
+      try {
+        const remote = await api.societies.getByCodeOrId(clean);
+        if (remote) return remote;
+      } catch {}
+      return null;
+    },
+
+    getByCodeOrName: async (term: string): Promise<Society | null> => {
+      const clean = term.trim().toLowerCase();
+      const cleanUpper = term.trim().toUpperCase();
+      const list = await dataStore.societies.list();
+
+      const matched = list.find(
+        (s) =>
+          (s.code && s.code.toUpperCase() === cleanUpper) ||
+          (s.code && s.code.toLowerCase() === clean) ||
+          s.id.toUpperCase() === cleanUpper ||
+          s.name.toLowerCase() === clean ||
+          (s.code && s.code.toLowerCase().includes(clean)) ||
+          s.name.toLowerCase().includes(clean) ||
+          s.id.toLowerCase().includes(clean)
       );
-      if (matchedAccount?.society) {
-        const soc = matchedAccount.society as Society;
-        return {
-          ...soc,
-          code: (matchedAccount.societyCode as string) || soc.code || null,
-        };
-      }
+
+      if (matched) return matched;
+
+      try {
+        const remote = await api.societies.getByCodeOrId(term.trim());
+        if (remote) return remote;
+      } catch {}
 
       return null;
     },
@@ -360,23 +400,20 @@ export const dataStore = {
   residents: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase
-            .from('residents')
-            .select('*, flats(flat_number)')
-            .eq('society_id', activeSocId);
-          if (!error && data) {
-            return (data as Record<string, unknown>[]).map((r) => ({
-              ...r,
-              flat_number: ((r.flats as Record<string, unknown> | undefined)?.flat_number as string) ?? null,
-            })) as (Resident & { flat_number: string | null })[];
-          }
-        } catch {}
-      }
-
       const all = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
-      return all.filter((r) => r.society_id === activeSocId);
+      const localList = all.filter((r) => r.society_id === activeSocId);
+
+      // Fast background sync without blocking page render
+      api.residents
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('residents', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: async (payload: {
@@ -408,19 +445,19 @@ export const dataStore = {
         flat_number: flatNumber,
       };
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('residents').insert({
-            society_id: activeSocId,
-            full_name: payload.full_name,
-            phone: payload.phone || null,
-            email: payload.email || null,
-            flat_id: payload.flat_id || null,
-            type: payload.type,
-            status: payload.status || 'active',
-          });
-        } catch {}
-      }
+      try {
+        await api.residents.create({
+          id: newResident.id,
+          society_id: activeSocId,
+          full_name: payload.full_name,
+          phone: payload.phone || null,
+          email: payload.email || null,
+          flat_id: payload.flat_id || null,
+          type: payload.type,
+          status: payload.status || 'active',
+          avatar_color: newResident.avatar_color,
+        });
+      } catch {}
 
       const list = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
       const updated = [newResident, ...list];
@@ -435,11 +472,9 @@ export const dataStore = {
     },
 
     update: async (id: string, updates: Partial<Resident & { flat_number?: string | null }>) => {
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('residents').update(updates).eq('id', id);
-        } catch {}
-      }
+      try {
+        await api.residents.update(id, updates);
+      } catch {}
 
       const flats = getLocal<Flat[]>('flats', INITIAL_FLATS);
       let assignedFlatNumber: string | null = null;
@@ -465,11 +500,9 @@ export const dataStore = {
     },
 
     delete: async (id: string) => {
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('residents').delete().eq('id', id);
-        } catch {}
-      }
+      try {
+        await api.residents.delete(id);
+      } catch {}
       const list = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
       const updated = list.filter((r) => r.id !== id);
       setLocal('residents', updated);
@@ -483,32 +516,29 @@ export const dataStore = {
   flats: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase
-            .from('flats')
-            .select('*, residents(full_name)')
-            .eq('society_id', activeSocId);
-          if (!error && data) {
-            return (data as Record<string, unknown>[]).map((f) => ({
-              ...f,
-              resident_name: ((f.residents as Record<string, unknown>[] | undefined)?.[0]?.full_name as string) ?? null,
-            })) as (Flat & { resident_name: string | null })[];
-          }
-        } catch {}
-      }
-
       const allFlats = getLocal<Flat[]>('flats', INITIAL_FLATS);
       const societyFlats = allFlats.filter((f) => f.society_id === activeSocId);
       const residents = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
 
-      return societyFlats.map((f) => {
+      const localList = societyFlats.map((f) => {
         const res = residents.find((r) => r.flat_id === f.id || r.flat_number === f.flat_number);
         return {
           ...f,
           resident_name: res ? res.full_name : null,
         };
       });
+
+      // Background sync from MySQL API
+      api.flats
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('flats', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: async (payload: {
@@ -531,11 +561,17 @@ export const dataStore = {
         created_at: new Date().toISOString(),
       };
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('flats').insert(newFlat);
-        } catch {}
-      }
+      try {
+        await api.flats.create({
+          id: newFlat.id,
+          society_id: activeSocId,
+          flat_number: payload.flat_number,
+          block: payload.block,
+          floor: payload.floor,
+          area: payload.area,
+          status: payload.status,
+        });
+      } catch {}
 
       const list = getLocal<Flat[]>('flats', INITIAL_FLATS);
       setLocal('flats', [newFlat, ...list]);
@@ -543,11 +579,9 @@ export const dataStore = {
     },
 
     update: async (id: string, updates: Partial<Flat>) => {
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('flats').update(updates).eq('id', id);
-        } catch {}
-      }
+      try {
+        await api.flats.update(id, updates);
+      } catch {}
 
       const list = getLocal<Flat[]>('flats', INITIAL_FLATS);
       const updated = list.map((f) => (f.id === id ? { ...f, ...updates } : f));
@@ -556,11 +590,9 @@ export const dataStore = {
     },
 
     delete: async (id: string) => {
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('flats').delete().eq('id', id);
-        } catch {}
-      }
+      try {
+        await api.flats.delete(id);
+      } catch {}
       const list = getLocal<Flat[]>('flats', INITIAL_FLATS);
       setLocal('flats', list.filter((f) => f.id !== id));
       return { error: null };
@@ -573,24 +605,20 @@ export const dataStore = {
   bills: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase
-            .from('maintenance_bills')
-            .select('*, flats(flat_number), residents(full_name)')
-            .eq('society_id', activeSocId);
-          if (!error && data) {
-            return (data as Record<string, unknown>[]).map((b) => ({
-              ...b,
-              flat_number: ((b.flats as Record<string, unknown> | undefined)?.flat_number as string) ?? null,
-              resident_name: ((b.residents as Record<string, unknown> | undefined)?.full_name as string) ?? null,
-            })) as (MaintenanceBill & { flat_number: string | null; resident_name: string | null })[];
-          }
-        } catch {}
-      }
-
       const allBills = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
-      return allBills.filter((b) => b.society_id === activeSocId);
+      const localList = allBills.filter((b) => b.society_id === activeSocId);
+
+      // Background sync
+      api.bills
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('bills', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: async (payload: {
@@ -624,20 +652,19 @@ export const dataStore = {
         resident_name: resident ? resident.full_name : 'Resident',
       };
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('maintenance_bills').insert({
-            society_id: activeSocId,
-            flat_id: payload.flat_id,
-            resident_id: newBill.resident_id,
-            bill_period: payload.bill_period,
-            amount: Number(payload.amount),
-            status: newBill.status,
-            due_date: newBill.due_date,
-            paid_at: newBill.paid_at,
-          });
-        } catch {}
-      }
+      try {
+        await api.bills.create({
+          id: newBill.id,
+          society_id: activeSocId,
+          flat_id: payload.flat_id,
+          resident_id: newBill.resident_id,
+          bill_period: payload.bill_period,
+          amount: Number(payload.amount),
+          status: newBill.status,
+          due_date: newBill.due_date,
+          paid_at: newBill.paid_at,
+        });
+      } catch {}
 
       const list = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
       setLocal('bills', [newBill, ...list]);
@@ -652,7 +679,11 @@ export const dataStore = {
       return { data: newBill, error: null };
     },
 
-    markPaid: async (id: string, paymentMethod = 'Online / UPI') => {
+    markPaid: async (id: string) => {
+      try {
+        await api.bills.pay(id);
+      } catch {}
+
       const list = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
       const updated = list.map((b) => {
         if (b.id === id) {
@@ -666,16 +697,13 @@ export const dataStore = {
       });
       setLocal('bills', updated);
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('maintenance_bills').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', id);
-        } catch {}
-      }
-
       return { error: null };
     },
 
     delete: async (id: string) => {
+      try {
+        await api.bills.delete(id);
+      } catch {}
       const list = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
       setLocal('bills', list.filter((b) => b.id !== id));
       return { error: null };
@@ -688,24 +716,20 @@ export const dataStore = {
   complaints: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase
-            .from('complaints')
-            .select('*, flats(flat_number), residents(full_name)')
-            .eq('society_id', activeSocId);
-          if (!error && data) {
-            return (data as Record<string, unknown>[]).map((c) => ({
-              ...c,
-              flat_number: ((c.flats as Record<string, unknown> | undefined)?.flat_number as string) ?? undefined,
-              resident_name: ((c.residents as Record<string, unknown> | undefined)?.full_name as string) ?? undefined,
-            })) as (Complaint & { resident_name?: string; flat_number?: string })[];
-          }
-        } catch {}
-      }
-
       const all = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
-      return all.filter((c) => c.society_id === activeSocId);
+      const localList = all.filter((c) => c.society_id === activeSocId);
+
+      // Background sync
+      api.complaints
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('complaints', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: async (payload: {
@@ -737,19 +761,18 @@ export const dataStore = {
         resident_name: resident ? resident.full_name : 'Society Resident',
       };
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('complaints').insert({
-            society_id: activeSocId,
-            resident_id: payload.resident_id || null,
-            flat_id: payload.flat_id || null,
-            title: payload.title,
-            description: payload.description || null,
-            priority: payload.priority || 'medium',
-            status: 'open',
-          });
-        } catch {}
-      }
+      try {
+        await api.complaints.create({
+          id: newComplaint.id,
+          society_id: activeSocId,
+          resident_id: payload.resident_id || null,
+          flat_id: payload.flat_id || null,
+          title: payload.title,
+          description: payload.description || null,
+          priority: payload.priority || 'medium',
+          status: 'open',
+        });
+      } catch {}
 
       const list = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
       setLocal('complaints', [newComplaint, ...list]);
@@ -765,6 +788,10 @@ export const dataStore = {
     },
 
     updateStatus: async (id: string, status: 'open' | 'in_progress' | 'resolved') => {
+      try {
+        await api.complaints.updateStatus(id, status);
+      } catch {}
+
       const list = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
       const updated = list.map((c) => {
         if (c.id === id) {
@@ -778,19 +805,13 @@ export const dataStore = {
       });
       setLocal('complaints', updated);
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabase
-            .from('complaints')
-            .update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null })
-            .eq('id', id);
-        } catch {}
-      }
-
       return { error: null };
     },
 
     delete: async (id: string) => {
+      try {
+        await api.complaints.delete(id);
+      } catch {}
       const list = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
       setLocal('complaints', list.filter((c) => c.id !== id));
       return { error: null };
@@ -803,23 +824,20 @@ export const dataStore = {
   visitors: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase
-            .from('visitors')
-            .select('*, flats(flat_number)')
-            .eq('society_id', activeSocId);
-          if (!error && data) {
-            return (data as Record<string, unknown>[]).map((v) => ({
-              ...v,
-              flat_number: ((v.flats as Record<string, unknown> | undefined)?.flat_number as string) ?? null,
-            })) as (Visitor & { flat_number: string | null })[];
-          }
-        } catch {}
-      }
-
       const all = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
-      return all.filter((v) => v.society_id === activeSocId);
+      const localList = all.filter((v) => v.society_id === activeSocId);
+
+      // Background sync
+      api.visitors
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('visitors', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: async (payload: {
@@ -848,19 +866,18 @@ export const dataStore = {
         flat_number: flat ? flat.flat_number : '—',
       };
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('visitors').insert({
-            society_id: activeSocId,
-            visitor_name: payload.visitor_name,
-            flat_id: payload.flat_id || null,
-            phone: payload.phone || null,
-            purpose: payload.purpose || 'Guest Visit',
-            photo_url: payload.photo_url || null,
-            entry_time: newVisitor.entry_time,
-          });
-        } catch {}
-      }
+      try {
+        await api.visitors.create({
+          id: newVisitor.id,
+          society_id: activeSocId,
+          visitor_name: payload.visitor_name,
+          flat_id: payload.flat_id || null,
+          phone: payload.phone || null,
+          purpose: payload.purpose || 'Guest Visit',
+          photo_url: payload.photo_url || null,
+          entry_time: newVisitor.entry_time,
+        });
+      } catch {}
 
       const list = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
       setLocal('visitors', [newVisitor, ...list]);
@@ -877,11 +894,10 @@ export const dataStore = {
 
     markExit: async (id: string) => {
       const exitTime = new Date().toISOString();
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('visitors').update({ exit_time: exitTime }).eq('id', id);
-        } catch {}
-      }
+      try {
+        await api.visitors.exit(id);
+      } catch {}
+
       const list = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
       const updated = list.map((v) => (v.id === id ? { ...v, exit_time: exitTime } : v));
       setLocal('visitors', updated);
@@ -893,11 +909,9 @@ export const dataStore = {
     },
 
     delete: async (id: string) => {
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.from('visitors').delete().eq('id', id);
-        } catch {}
-      }
+      try {
+        await api.visitors.delete(id);
+      } catch {}
       const list = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
       setLocal('visitors', list.filter((v) => v.id !== id));
       return { error: null };
@@ -910,15 +924,20 @@ export const dataStore = {
   facilities: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase.from('facilities').select('*').eq('society_id', activeSocId);
-          if (!error && data) return data as Facility[];
-        } catch {}
-      }
-
       const all = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
-      return all.filter((f) => f.society_id === activeSocId);
+      const localList = all.filter((f) => f.society_id === activeSocId);
+
+      // Background sync
+      api.facilities
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('facilities', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: async (payload: {
@@ -938,12 +957,27 @@ export const dataStore = {
         created_at: new Date().toISOString(),
       };
 
+      try {
+        await api.facilities.create({
+          id: newFacility.id,
+          society_id: activeSocId,
+          name: payload.name,
+          description: payload.description,
+          status: payload.status,
+          open_until: payload.open_until,
+        });
+      } catch {}
+
       const list = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
       setLocal('facilities', [newFacility, ...list]);
       return { data: newFacility, error: null };
     },
 
     update: async (id: string, updates: Partial<Facility>) => {
+      try {
+        await api.facilities.update(id, updates);
+      } catch {}
+
       const list = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
       setLocal(
         'facilities',
@@ -953,6 +987,9 @@ export const dataStore = {
     },
 
     delete: async (id: string) => {
+      try {
+        await api.facilities.delete(id);
+      } catch {}
       const list = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
       setLocal('facilities', list.filter((f) => f.id !== id));
       return { error: null };
@@ -964,6 +1001,17 @@ export const dataStore = {
       const activeSocId = getActiveSocietyId();
       const all = getLocal<FacilityBooking[]>('bookings', INITIAL_BOOKINGS);
       const socBookings = all.filter((b) => b.society_id === activeSocId);
+
+      // Background sync
+      api.facilities.bookings
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('bookings', data, false);
+          }
+        })
+        .catch(() => {});
+
       if (facilityId) {
         return socBookings.filter((b) => b.facility_id === facilityId);
       }
@@ -989,6 +1037,10 @@ export const dataStore = {
         status: 'confirmed',
         created_at: new Date().toISOString(),
       };
+
+      try {
+        await api.facilities.bookings.create(newBooking);
+      } catch {}
 
       const list = getLocal<FacilityBooking[]>('bookings', INITIAL_BOOKINGS);
       setLocal('bookings', [newBooking, ...list]);
@@ -1039,7 +1091,19 @@ export const dataStore = {
     list: async () => {
       const activeSocId = getActiveSocietyId();
       const all = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
-      return all.filter((n) => n.society_id === activeSocId);
+      const localList = all.filter((n) => n.society_id === activeSocId);
+
+      // Background sync
+      api.notifications
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('notifications', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: (payload: {
@@ -1062,12 +1126,20 @@ export const dataStore = {
         created_at: new Date().toISOString(),
       };
 
+      try {
+        api.notifications.create(newNotif);
+      } catch {}
+
       const list = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
       setLocal('notifications', [newNotif, ...list]);
       return newNotif;
     },
 
     markRead: async (id: string) => {
+      try {
+        await api.notifications.markRead(id);
+      } catch {}
+
       const list = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
       setLocal(
         'notifications',
@@ -1077,6 +1149,10 @@ export const dataStore = {
 
     markAllRead: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        await api.notifications.markAllRead(activeSocId);
+      } catch {}
+
       const list = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
       setLocal(
         'notifications',
@@ -1091,31 +1167,11 @@ export const dataStore = {
   members: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      if (isSupabaseConfigured) {
-        try {
-          const { data } = await supabase.from('profiles').select('*').eq('society_id', activeSocId);
-          if (data && data.length > 0) {
-            return data.map((p) => ({
-              id: p.id,
-              society_id: p.society_id,
-              full_name: p.full_name,
-              phone: p.phone,
-              email: (p as Record<string, unknown>).email as string || null,
-              role: p.role,
-              permissions: ((p as Record<string, unknown>).permissions as string[]) || (p.role === 'admin' ? ['all'] : p.role === 'staff' ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints'] : ['complaints', 'facilities', 'bills']),
-              avatar_color: p.avatar_color || 'teal',
-              created_at: p.created_at,
-            })) as SocietyMember[];
-          }
-        } catch {}
-      }
-
       const all = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       const isCustomSociety = activeSocId !== DEMO_SOCIETY_ID;
 
-      return all.filter((m) => {
+      const localList = all.filter((m) => {
         if (isCustomSociety) {
-          // Strictly exclude legacy demo user IDs and names
           if (m.id === 'usr-demo-admin-001' || m.id === 'usr-demo-staff-002' || m.id === 'usr-demo-resident-003') return false;
           if (m.full_name === 'Vikram Mehta' || m.full_name === 'Rajesh Sharma' || m.full_name === 'Pooja Iyer') return false;
           if (m.society_id && m.society_id !== activeSocId) return false;
@@ -1124,6 +1180,18 @@ export const dataStore = {
         }
         return m.society_id === DEMO_SOCIETY_ID || !m.society_id;
       });
+
+      // Background sync
+      api.members
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('members', data, false);
+          }
+        })
+        .catch(() => {});
+
+      return localList;
     },
 
     create: async (payload: {
@@ -1149,190 +1217,108 @@ export const dataStore = {
         society_id: activeSocId,
         full_name: payload.full_name,
         phone: payload.phone,
-        email: payload.email || `${payload.role}-${Date.now().toString(36)}@smartnest.community`,
+        email: payload.email || null,
         role: payload.role,
         permissions: defaultPerms,
-        avatar_color: ['blue', 'teal', 'rose', 'violet', 'amber'][Math.floor(Math.random() * 5)],
+        avatar_color: payload.role === 'admin' ? 'teal' : payload.role === 'staff' ? 'blue' : 'violet',
         created_at: new Date().toISOString(),
       };
 
-      // Register staff / security credentials so they can log in and operate the app
-      const accounts = getLocal<Record<string, unknown>[]>('accounts', []);
-      const societyList = getLocal<Society[]>('societies', []);
-      const currentSoc = societyList.find((s) => s.id === activeSocId) || {
-        id: activeSocId,
-        name: 'My Housing Society',
-        address: 'Official Community',
-        created_by: newId,
-        created_at: new Date().toISOString(),
-      };
-
-      const newAccount = {
-        email: newMember.email!.toLowerCase().trim(),
-        password: payload.password || 'smartnest2026',
-        societyId: activeSocId,
-        societyCode: activeSocId.substring(0, 8).toUpperCase(),
-        profile: {
-          id: newId,
-          society_id: activeSocId,
-          full_name: newMember.full_name,
-          phone: newMember.phone,
-          role: newMember.role,
-          permissions: defaultPerms,
-          avatar_color: newMember.avatar_color,
-          created_at: newMember.created_at,
-        },
-        society: currentSoc,
-        role: newMember.role,
-        created_at: new Date().toISOString(),
-      };
-
-      setLocal('accounts', [newAccount, ...accounts.filter((a) => (a.email as string) !== newAccount.email)]);
+      try {
+        await api.members.create(newMember);
+      } catch {}
 
       const list = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       setLocal('members', [newMember, ...list]);
+
+      dataStore.notifications.create({
+        title: 'New Member Added',
+        message: `${payload.full_name} was added as ${payload.role.toUpperCase()} to the society.`,
+        type: 'info',
+        link: 'settings',
+      });
+
       return { data: newMember, error: null };
     },
 
-    updateRole: async (id: string, role: Role, permissions?: string[]) => {
+    updateRole: async (id: string, newRole: Role) => {
+      try {
+        await api.members.updateRole(id, newRole);
+      } catch {}
+
       const list = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       const updated = list.map((m) => {
         if (m.id === id) {
-          const perms = permissions || (
-            role === 'admin'
-              ? ['all', 'gate_entry', 'visitor_logs', 'deliveries', 'complaints', 'facilities', 'bills', 'members', 'flats', 'settings']
-              : role === 'staff'
-              ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
-              : ['complaints', 'facilities', 'bills']
-          );
-          return { ...m, role, permissions: perms };
+          return {
+            ...m,
+            role: newRole,
+            permissions: newRole === 'admin' ? ['all'] : newRole === 'staff' ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints'] : ['complaints', 'facilities'],
+          };
         }
         return m;
       });
       setLocal('members', updated);
-
-      const accounts = getLocal<Record<string, unknown>[]>('accounts', []);
-      const updatedAccounts = accounts.map((a) => {
-        const prof = a.profile as Record<string, unknown> | undefined;
-        if (prof?.id === id) {
-          return {
-            ...a,
-            role,
-            profile: { ...prof, role, permissions: permissions || prof.permissions },
-          };
-        }
-        return a;
-      });
-      setLocal('accounts', updatedAccounts);
       return { error: null };
     },
 
     updatePermissions: async (id: string, permissions: string[]) => {
       const list = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
-      const updated = list.map((m) => (m.id === id ? { ...m, permissions } : m));
-      setLocal('members', updated);
-
-      const accounts = getLocal<Record<string, unknown>[]>('accounts', []);
-      const updatedAccounts = accounts.map((a) => {
-        const prof = a.profile as Record<string, unknown> | undefined;
-        if (prof?.id === id) {
+      const updated = list.map((m) => {
+        if (m.id === id) {
           return {
-            ...a,
-            profile: { ...prof, permissions },
+            ...m,
+            permissions,
           };
         }
-        return a;
+        return m;
       });
-      setLocal('accounts', updatedAccounts);
+      setLocal('members', updated);
       return { error: null };
     },
 
     delete: async (id: string) => {
+      try {
+        await api.members.delete(id);
+      } catch {}
       const list = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       setLocal('members', list.filter((m) => m.id !== id));
-
-      const accounts = getLocal<Record<string, unknown>[]>('accounts', []);
-      setLocal('accounts', accounts.filter((a) => (a.profile as Record<string, unknown> | undefined)?.id !== id));
       return { error: null };
     },
   },
 
   // ----------------------------------------------------------
-  // TABLE DATA EXPORT HELPER
+  // MARKETING DEMO LEADS
   // ----------------------------------------------------------
-  getTableData: async (table: string, flatId?: string | null) => {
-    if (table === 'residents') {
-      const list = await dataStore.residents.list();
-      return list.map((r) => ({
-        ID: r.id,
-        Name: r.full_name,
-        Phone: r.phone || '—',
-        Email: r.email || '—',
-        Flat: r.flat_number || '—',
-        Type: r.type,
-        Status: r.status,
-      }));
-    }
-    if (table === 'bills') {
-      let list = await dataStore.bills.list();
-      if (flatId) list = list.filter((b) => b.flat_id === flatId);
-      return list.map((b) => ({
-        ID: b.id,
-        Flat: b.flat_number || '—',
-        Resident: b.resident_name || '—',
-        Period: b.bill_period,
-        Amount: b.amount,
-        Status: b.status,
-        DueDate: b.due_date || '—',
-        PaidAt: b.paid_at || '—',
-      }));
-    }
-    if (table === 'complaints') {
-      let list = await dataStore.complaints.list();
-      if (flatId) list = list.filter((c) => c.flat_id === flatId);
-      return list.map((c) => ({
-        ID: c.id,
-        Title: c.title,
-        Flat: c.flat_number || '—',
-        Resident: c.resident_name || '—',
-        Priority: c.priority,
-        Status: c.status,
-        Created: c.created_at,
-      }));
-    }
-    if (table === 'visitors') {
-      let list = await dataStore.visitors.list();
-      if (flatId) list = list.filter((v) => v.flat_id === flatId);
-      return list.map((v) => ({
-        ID: v.id,
-        Visitor: v.visitor_name,
-        Flat: v.flat_number || '—',
-        Phone: v.phone || '—',
-        Purpose: v.purpose || '—',
-        Entry: v.entry_time,
-        Exit: v.exit_time || 'In Premises',
-      }));
-    }
-    return [];
-  },
-
-  // ----------------------------------------------------------
-  // LEADS (FOR DEMO WALKTHROUGHS)
-  // ----------------------------------------------------------
-  leads: {
-    list: async () => {
-      return getLocal<DemoLead[]>('leads', []);
+  demoLeads: {
+    list: async (): Promise<DemoLead[]> => {
+      try {
+        const leads = await api.leads.list();
+        if (Array.isArray(leads) && leads.length > 0) return leads;
+      } catch {}
+      return getLocal<DemoLead[]>('demo_leads', []);
     },
 
-    create: async (lead: Omit<DemoLead, 'id' | 'created_at'>) => {
+    create: async (lead: Omit<DemoLead, 'id' | 'created_at'>): Promise<DemoLead> => {
       const newLead: DemoLead = {
-        id: generateId('lead'),
         ...lead,
+        id: generateId('lead'),
         created_at: new Date().toISOString(),
       };
-      const list = getLocal<DemoLead[]>('leads', []);
-      setLocal('leads', [newLead, ...list]);
-      return { data: newLead, error: null };
+      try {
+        await api.leads.create(newLead);
+      } catch {}
+      const list = getLocal<DemoLead[]>('demo_leads', []);
+      setLocal('demo_leads', [newLead, ...list]);
+      return newLead;
     },
+  },
+
+  leads: {
+    list: async (): Promise<DemoLead[]> => dataStore.demoLeads.list(),
+    create: async (lead: Omit<DemoLead, 'id' | 'created_at'>): Promise<DemoLead> => dataStore.demoLeads.create(lead),
+  },
+
+  getTableData: async (tableName: string, fallback: any = []) => {
+    return getLocal(tableName, fallback);
   },
 };

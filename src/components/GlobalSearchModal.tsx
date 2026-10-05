@@ -15,7 +15,7 @@ import {
   ArrowRight,
   Sparkles,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { dataStore } from '../lib/dataStore';
 import { useAuth } from '../lib/auth';
 
 type View = 'overview' | 'residents' | 'flats' | 'maintenance' | 'complaints' | 'visitors' | 'facilities' | 'reports' | 'settings';
@@ -110,95 +110,72 @@ export function GlobalSearchModal({ isOpen, onClose, onNavigate }: GlobalSearchM
     const searchSocietyEntities = async () => {
       const items: SearchResultItem[] = [...localNav, ...localAct];
 
-      if (profile?.society_id) {
-        try {
-          // Search Residents
-          const { data: resData } = await supabase
-            .from('residents')
-            .select('id, full_name, phone, type, flats(flat_number)')
-            .eq('society_id', profile.society_id)
-            .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`)
-            .limit(4);
-
-          if (resData) {
-            resData.forEach((r: Record<string, unknown>) => {
-              const flatNum = (r.flats as Record<string, unknown> | undefined)?.flat_number as string | undefined;
-              items.push({
-                id: `res-${r.id}`,
-                category: 'Residents',
-                title: String(r.full_name),
-                subtitle: `Flat ${flatNum || 'N/A'} · ${r.type} · ${r.phone || 'No phone'}`,
-                view: 'residents',
-                icon: Users,
-              });
+      try {
+        // Search Residents
+        const residents = await dataStore.residents.list();
+        residents
+          .filter((r) => r.full_name.toLowerCase().includes(q) || (r.phone && r.phone.toLowerCase().includes(q)))
+          .slice(0, 4)
+          .forEach((r) => {
+            items.push({
+              id: `res-${r.id}`,
+              category: 'Residents',
+              title: r.full_name,
+              subtitle: `Flat ${r.flat_number || 'N/A'} · ${r.type} · ${r.phone || 'No phone'}`,
+              view: 'residents',
+              icon: Users,
             });
-          }
+          });
 
-          // Search Flats
-          const { data: flatData } = await supabase
-            .from('flats')
-            .select('id, flat_number, block, floor, status')
-            .eq('society_id', profile.society_id)
-            .or(`flat_number.ilike.%${q}%,block.ilike.%${q}%`)
-            .limit(4);
-
-          if (flatData) {
-            flatData.forEach((f: Record<string, unknown>) => {
-              items.push({
-                id: `flat-${f.id}`,
-                category: 'Flats',
-                title: `Flat ${f.flat_number}`,
-                subtitle: `${f.block || 'Main Wing'} · Floor ${f.floor || '—'} · ${String(f.status).replace('_', ' ')}`,
-                view: 'flats',
-                icon: Building2,
-              });
+        // Search Flats
+        const flats = await dataStore.flats.list();
+        flats
+          .filter((f) => f.flat_number.toLowerCase().includes(q) || (f.block && f.block.toLowerCase().includes(q)))
+          .slice(0, 4)
+          .forEach((f) => {
+            items.push({
+              id: `flat-${f.id}`,
+              category: 'Flats',
+              title: `Flat ${f.flat_number}`,
+              subtitle: `${f.block || 'Main Wing'} · Floor ${f.floor || '—'} · ${String(f.status).replace('_', ' ')}`,
+              view: 'flats',
+              icon: Building2,
             });
-          }
+          });
 
-          // Search Complaints
-          const { data: compData } = await supabase
-            .from('complaints')
-            .select('id, title, priority, status')
-            .eq('society_id', profile.society_id)
-            .ilike('title', `%${q}%`)
-            .limit(3);
-
-          if (compData) {
-            compData.forEach((c: Record<string, unknown>) => {
-              items.push({
-                id: `comp-${c.id}`,
-                category: 'Complaints',
-                title: String(c.title),
-                subtitle: `Status: ${c.status} · Priority: ${c.priority}`,
-                view: 'complaints',
-                icon: MessageSquareWarning,
-              });
+        // Search Complaints
+        const complaints = await dataStore.complaints.list();
+        complaints
+          .filter((c) => c.title.toLowerCase().includes(q))
+          .slice(0, 3)
+          .forEach((c) => {
+            items.push({
+              id: `comp-${c.id}`,
+              category: 'Complaints',
+              title: c.title,
+              subtitle: `Status: ${c.status} · Priority: ${c.priority}`,
+              view: 'complaints',
+              icon: MessageSquareWarning,
             });
-          }
+          });
 
-          // Search Facilities
-          const { data: facData } = await supabase
-            .from('facilities')
-            .select('id, name, status, open_until')
-            .eq('society_id', profile.society_id)
-            .ilike('name', `%${q}%`)
-            .limit(3);
-
-          if (facData) {
-            facData.forEach((f: Record<string, unknown>) => {
-              items.push({
-                id: `fac-${f.id}`,
-                category: 'Facilities',
-                title: String(f.name),
-                subtitle: `Status: ${f.status} · ${f.open_until ? `Until ${f.open_until}` : 'Always open'}`,
-                view: 'facilities',
-                icon: CalendarDays,
-              });
+        // Search Facilities
+        const facilities = await dataStore.facilities.list();
+        facilities
+          .filter((f) => f.name.toLowerCase().includes(q))
+          .slice(0, 3)
+          .forEach((f) => {
+            items.push({
+              id: `fac-${f.id}`,
+              category: 'Facilities',
+              title: f.name,
+              subtitle: `Status: ${f.status} · ${f.open_until ? `Until ${f.open_until}` : 'Always open'}`,
+              view: 'facilities',
+              icon: CalendarDays,
             });
-          }
-        } catch {
-          // Keep local matches
-        }
+          });
+      } catch {
+        // Keep local matches
       }
 
       setResults(items);
@@ -295,7 +272,7 @@ export function GlobalSearchModal({ isOpen, onClose, onNavigate }: GlobalSearchM
         <div style={{ maxHeight: 380, overflowY: 'auto', padding: '10px 12px' }}>
           {loading && (
             <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--muted-2)' }}>
-              Searching workspace...
+              Searching community records...
             </div>
           )}
 

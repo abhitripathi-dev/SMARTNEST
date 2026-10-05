@@ -1,21 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://lzvwtsichwlwwgnrhqrv.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.dummyKeyForAppInitialization';
-
-export const isSupabaseConfigured = Boolean(
-  import.meta.env.VITE_SUPABASE_URL &&
-  import.meta.env.VITE_SUPABASE_ANON_KEY &&
-  !import.meta.env.VITE_SUPABASE_URL.includes('your_supabase')
-);
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
-
 export type Role = 'admin' | 'resident' | 'staff';
 
 export type Profile = {
@@ -86,6 +68,8 @@ export type Complaint = {
   status: 'open' | 'in_progress' | 'resolved';
   created_at: string;
   resolved_at: string | null;
+  resident_name?: string | null;
+  flat_number?: string | null;
 };
 
 export type Visitor = {
