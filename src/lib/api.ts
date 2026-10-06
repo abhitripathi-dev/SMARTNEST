@@ -87,6 +87,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    registerResident: (data: any) =>
+      request<{ token: string; user: any; resident: any }>('/auth/register-resident', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     joinSociety: (data: { societyId?: string; societyCode?: string; role?: Role }) =>
       request<{ message: string; societyId: string }>('/auth/join', {
         method: 'POST',

@@ -477,8 +477,149 @@ router.post('/join', authMiddleware, async (req: AuthRequest, res) => {
     prof.society_id = targetSocietyId;
     prof.role = role;
   }
+  saveMemoryStore();
+  return res.json({ message: 'Joined successfully', societyId: targetSocietyId });
+});
 
-  res.json({ message: 'Joined society successfully', societyId: targetSocietyId });
+// -------------------------------------------------------------
+// POST /api/auth/register-resident (Resident Self-Onboarding)
+// -------------------------------------------------------------
+router.post('/register-resident', async (req, res) => {
+  const {
+    societyCode,
+    societyId,
+    fullName,
+    email,
+    phone,
+    password,
+    flat_number,
+    flat_id,
+    type = 'owner',
+  } = req.body;
+
+  if (!fullName || !email || !password) {
+    return res.status(400).json({ error: 'Full name, email, and password are required' });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  // 1. Resolve Society
+  let targetSoc = memoryStore.societies.find((s) => s.id === societyId);
+  if (!targetSoc && societyCode) {
+    const codeClean = societyCode.trim().toUpperCase();
+    targetSoc = memoryStore.societies.find(
+      (s) => s.code?.toUpperCase() === codeClean || s.id.substring(0, 8).toUpperCase() === codeClean
+    );
+  }
+
+  if (!targetSoc) {
+    targetSoc = memoryStore.societies[0] || null;
+  }
+
+  if (!targetSoc) {
+    return res.status(404).json({ error: 'Society not found. Please verify the society code.' });
+  }
+
+  // 2. Check if user already exists
+  if (memoryStore.users.some((u) => u.email?.toLowerCase().trim() === cleanEmail)) {
+    return res.status(409).json({ error: 'This email is already registered. Please sign in.' });
+  }
+
+  const userId = genId('usr');
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  // 3. Resolve or create flat
+  let resolvedFlat = memoryStore.flats.find(
+    (f) => f.society_id === targetSoc!.id && (f.id === flat_id || f.flat_number === flat_number)
+  );
+  if (!resolvedFlat && flat_number) {
+    resolvedFlat = {
+      id: genId('flat'),
+      society_id: targetSoc.id,
+      flat_number,
+      block: `${flat_number.split('-')[0] || 'A'} Wing`,
+      floor: '1st Floor',
+      area: '1,250 sq ft',
+      status: 'occupied',
+      resident_name: fullName,
+      created_at: new Date().toISOString(),
+    };
+    memoryStore.flats.push(resolvedFlat);
+  } else if (resolvedFlat) {
+    resolvedFlat.status = 'occupied';
+    resolvedFlat.resident_name = fullName;
+  }
+
+  // 4. Create User & Profile
+  const newUser = {
+    id: userId,
+    email: cleanEmail,
+    password_hash: passwordHash,
+    raw_password: password,
+    society_id: targetSoc.id,
+  };
+  memoryStore.users.push(newUser);
+
+  const newProfile = {
+    id: userId,
+    society_id: targetSoc.id,
+    full_name: `${fullName.trim()} (Resident)`,
+    phone: phone || null,
+    role: 'resident',
+    avatar_color: 'violet',
+    created_at: new Date().toISOString(),
+  };
+  memoryStore.profiles.push(newProfile);
+
+  // 5. Create Resident Record
+  const newResident = {
+    id: genId('res'),
+    society_id: targetSoc.id,
+    flat_id: resolvedFlat?.id || null,
+    full_name: fullName.trim(),
+    phone: phone || null,
+    email: cleanEmail,
+    type,
+    status: 'active',
+    avatar_color: 'violet',
+    user_id: userId,
+    flat_number: resolvedFlat?.flat_number || flat_number || null,
+    created_at: new Date().toISOString(),
+  };
+  memoryStore.residents.push(newResident);
+
+  // 6. Create Member record
+  memoryStore.members.push({
+    id: userId,
+    society_id: targetSoc.id,
+    full_name: `${fullName.trim()} (Resident)`,
+    phone: phone || null,
+    email: cleanEmail,
+    role: 'resident',
+    permissions: ['complaints', 'facilities', 'bills'],
+    avatar_color: 'violet',
+    created_at: new Date().toISOString(),
+  });
+
+  saveMemoryStore();
+
+  const token = jwt.sign(
+    { id: userId, email: cleanEmail, role: 'resident', full_name: fullName, society_id: targetSoc.id },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  return res.status(201).json({
+    token,
+    user: {
+      id: userId,
+      email: cleanEmail,
+      profile: newProfile,
+      society: targetSoc,
+    },
+    resident: newResident,
+  });
 });
 
 export default router;
+

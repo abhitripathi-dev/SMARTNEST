@@ -12,6 +12,20 @@
       "password_hash": "$2b$10$RV1nggXKGKk8IIpC1NRxXODQsUjYDIaqX.DQW73BwB8YKXM5hAWIm",
       "raw_password": "password123",
       "society_id": "soc-muwwjpgw-sstwp"
+    },
+    {
+      "id": "usr-muwwzj3b-hbv9p",
+      "email": "rajesh.secretary@greenwood.com",
+      "password_hash": "$2b$10$hVZwxvEykV99T6/ZLzN/pO9lbaxjK2hQbnXrSvg90egz3TqOVcvQe",
+      "raw_password": "Password@123",
+      "society_id": "soc-muwwzj3b-8s891"
+    },
+    {
+      "id": "usr-muwwzj52-0gmu9",
+      "email": "sunita.resident@greenwood.com",
+      "password_hash": "$2b$10$D9PTUvQBPtLsi4PzFjo/2ufAIOOyJhsKtfAYs22VyHlq1f0XV2feG",
+      "raw_password": "SunitaPassword@123",
+      "society_id": "soc-muwwzj3b-8s891"
     }
   ],
   "profiles": [
@@ -32,6 +46,24 @@
       "role": "admin",
       "avatar_color": "teal",
       "created_at": "2026-10-06T16:37:45.064Z"
+    },
+    {
+      "id": "usr-muwwzj3b-hbv9p",
+      "society_id": "soc-muwwzj3b-8s891",
+      "full_name": "Rajesh Sharma (Admin)",
+      "phone": "+91 98765 43210",
+      "role": "admin",
+      "avatar_color": "teal",
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "usr-muwwzj52-0gmu9",
+      "society_id": "soc-muwwzj3b-8s891",
+      "full_name": "Sunita Verma (Resident)",
+      "phone": "+91 91234 56789",
+      "role": "resident",
+      "avatar_color": "violet",
+      "created_at": "2026-10-06T16:50:03.350Z"
     }
   ],
   "societies": [
@@ -50,6 +82,14 @@
       "code": "SN-60944",
       "created_by": "usr-muwwjpgw-480a5",
       "created_at": "2026-10-06T16:37:45.064Z"
+    },
+    {
+      "id": "soc-muwwzj3b-8s891",
+      "name": "Greenwood Heights",
+      "address": "Kalyani Nagar, Pune, Pune",
+      "code": "SN-72598",
+      "created_by": "usr-muwwzj3b-hbv9p",
+      "created_at": "2026-10-06T16:50:03.293Z"
     }
   ],
   "flats": [
@@ -250,6 +290,94 @@
       "status": "vacant",
       "resident_name": null,
       "created_at": "2026-10-06T16:37:45.064Z"
+    },
+    {
+      "id": "flat-muwwzj4t-rq5ju",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "A-101",
+      "block": "A Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "occupied",
+      "resident_name": "Rajesh Sharma",
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwwzj4t-z4jn4",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "B-101",
+      "block": "B Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwwzj4t-q7n6g",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "A-102",
+      "block": "A Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "occupied",
+      "resident_name": "Sunita Verma",
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwwzj4t-hkay3",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "B-102",
+      "block": "B Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwwzj4t-18oth",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "A-201",
+      "block": "A Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwwzj4t-clpvn",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "B-201",
+      "block": "B Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwwzj4t-trwgj",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "A-202",
+      "block": "A Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwwzj4t-9s5c3",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_number": "B-202",
+      "block": "B Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:50:03.293Z"
     }
   ],
   "residents": [
@@ -344,6 +472,33 @@
       "user_id": null,
       "flat_number": "A-103",
       "created_at": "2026-10-06T16:37:56.567Z"
+    },
+    {
+      "id": "res-muwwzj4t-z0kja",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_id": "flat-muwwzj4t-rq5ju",
+      "full_name": "Rajesh Sharma",
+      "phone": "+91 98765 43210",
+      "email": "rajesh.secretary@greenwood.com",
+      "type": "owner",
+      "status": "active",
+      "avatar_color": "teal",
+      "flat_number": "A-101",
+      "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "res-muwwzj6e-8u2oh",
+      "society_id": "soc-muwwzj3b-8s891",
+      "flat_id": "flat-muwwzj4t-q7n6g",
+      "full_name": "Sunita Verma",
+      "phone": "+91 91234 56789",
+      "email": "sunita.resident@greenwood.com",
+      "type": "owner",
+      "status": "active",
+      "avatar_color": "violet",
+      "user_id": "usr-muwwzj52-0gmu9",
+      "flat_number": "A-102",
+      "created_at": "2026-10-06T16:50:03.350Z"
     }
   ],
   "bills": [
@@ -669,6 +824,21 @@
       ],
       "avatar_color": "violet",
       "created_at": "2026-01-10T00:00:00Z"
+    },
+    {
+      "id": "usr-muwwzj52-0gmu9",
+      "society_id": "soc-muwwzj3b-8s891",
+      "full_name": "Sunita Verma (Resident)",
+      "phone": "+91 91234 56789",
+      "email": "sunita.resident@greenwood.com",
+      "role": "resident",
+      "permissions": [
+        "complaints",
+        "facilities",
+        "bills"
+      ],
+      "avatar_color": "violet",
+      "created_at": "2026-10-06T16:50:03.350Z"
     }
   ],
   "leads": [

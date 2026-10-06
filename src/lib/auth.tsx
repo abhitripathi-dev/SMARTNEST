@@ -474,6 +474,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cleanPassword = password.trim();
 
     // 0. Try MySQL API Server Login first
+    let apiErrorMsg: string | null = null;
     try {
       const loginRes = await api.auth.login({ email: cleanEmail, password: cleanPassword });
       if (loginRes?.token && loginRes.user) {
@@ -489,11 +490,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('jwt_token', loginRes.token);
         localStorage.setItem('society_view_mode', 'portal');
         localStorage.removeItem('society_demo_role');
+
+        const sessionAccount = {
+          email: usr.email,
+          societyId: usr.society?.id,
+          societyCode: usr.society?.code,
+          profile: usr.profile,
+          society: usr.society,
+          role: usr.profile?.role || 'admin',
+        };
+        localStorage.setItem('society_custom_registered', JSON.stringify(sessionAccount));
+
+        const currentAccounts = getLocal<RegisteredAccount[]>('accounts', []);
+        setLocal('accounts', [sessionAccount as any, ...currentAccounts.filter((a) => a.email !== usr.email)]);
+
+        window.dispatchEvent(new Event('society-auth-change'));
+        window.dispatchEvent(new Event('society-data-change'));
+
         setLoading(false);
         return { error: null };
       }
-    } catch {
-      // Backend not reached or not found in DB - seamlessly fallback to local stores
+    } catch (err: any) {
+      apiErrorMsg = err?.message || null;
     }
 
     // 1. Check registered accounts in dataStore (society_db_accounts)
@@ -603,7 +621,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: null };
     }
 
-    return { error: 'Invalid email or password. Please verify your credentials or register your society.' };
+    return { error: apiErrorMsg || 'Invalid email or password. Please verify your credentials or register your society.' };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {

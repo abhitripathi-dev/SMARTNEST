@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { dataStore } from '../lib/dataStore';
+import { api } from '../lib/api';
 import type { Role, Society, Flat } from '../lib/types';
 
 interface Props {
@@ -231,7 +232,35 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
         flatIdToLink = flatRes.data?.id || `flat-${effectiveFlat.toLowerCase()}-${Date.now().toString(36)}`;
       }
 
-      // Create resident in dataStore
+      // Centralized Backend Resident Registration
+      let backendToken: string | null = null;
+      try {
+        const regRes = await api.auth.registerResident({
+          societyCode: targetSociety.code || effectiveCode,
+          societyId: socId,
+          fullName: fullName.trim(),
+          email: emailClean,
+          phone: fullPhone,
+          password: password,
+          flat_number: effectiveFlat,
+          flat_id: flatIdToLink || undefined,
+          type: type,
+        });
+        if (regRes?.token) {
+          backendToken = regRes.token;
+          localStorage.setItem('society_auth_token', regRes.token);
+          localStorage.setItem('jwt_token', regRes.token);
+        }
+      } catch (backendErr: any) {
+        console.warn('Backend resident registration warning:', backendErr);
+        if (backendErr?.message?.includes('already registered') || backendErr?.message?.includes('409')) {
+          setError(backendErr.message);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Create resident in local dataStore
       const resId = `res-${Date.now().toString(36)}`;
       await dataStore.residents.create({
         society_id: socId,
@@ -265,6 +294,7 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
         profile: newMember,
         society: targetSociety,
         role: 'resident',
+        token: backendToken,
         created_at: new Date().toISOString(),
       };
 
