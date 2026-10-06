@@ -1,6 +1,11 @@
+import fs from 'fs';
+import path from 'path';
+
 export const DEMO_SOCIETY_ID = 'e7b1a234-5678-4321-8765-abcdef123456';
 
-export const memoryStore = {
+const STORE_FILE = path.resolve(process.cwd(), 'server_store.json');
+
+const defaultData = {
   users: [
     {
       id: 'usr-demo-admin-001',
@@ -99,3 +104,44 @@ export const memoryStore = {
     { id: 'lead-1', name: 'Ramesh Patel', mobile: '+91 9876543210', society_name: 'Palm Grove Residences', city_name: 'Mumbai', units: '51-200 units', role: 'Management Committee / RWA President', interest: 'Complete Smart Community Suite', created_at: '2026-09-01T10:00:00Z' },
   ],
 };
+
+function loadStore() {
+  try {
+    if (fs.existsSync(STORE_FILE)) {
+      const raw = fs.readFileSync(STORE_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      return {
+        users: data.users || defaultData.users,
+        profiles: data.profiles || defaultData.profiles,
+        societies: data.societies || defaultData.societies,
+        flats: data.flats || defaultData.flats,
+        residents: data.residents || defaultData.residents,
+        bills: data.bills || defaultData.bills,
+        complaints: data.complaints || defaultData.complaints,
+        visitors: data.visitors || defaultData.visitors,
+        facilities: data.facilities || defaultData.facilities,
+        bookings: data.bookings || defaultData.bookings,
+        notifications: data.notifications || defaultData.notifications,
+        members: data.members || defaultData.members,
+        leads: data.leads || defaultData.leads,
+      };
+    }
+  } catch (err) {
+    console.warn('[Store] Could not read store.json, using defaults:', err);
+  }
+  return { ...defaultData };
+}
+
+export const memoryStore = loadStore();
+
+export function saveMemoryStore() {
+  try {
+    fs.writeFileSync(STORE_FILE, JSON.stringify(memoryStore, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[Store] Failed to write store.json:', err);
+  }
+}
+
+// Auto-save every 2 seconds
+setInterval(saveMemoryStore, 2000);
+

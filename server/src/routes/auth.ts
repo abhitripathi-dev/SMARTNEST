@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db';
-import { memoryStore, DEMO_SOCIETY_ID } from '../memoryStore';
+import { memoryStore, saveMemoryStore, DEMO_SOCIETY_ID } from '../memoryStore';
 import { JWT_SECRET, authMiddleware, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -53,6 +53,7 @@ router.post('/register', async (req, res) => {
   // Memory store mirror
   memoryStore.users.push({ id: userId, email: cleanEmail, password_hash: passwordHash, raw_password: password, society_id: null });
   memoryStore.profiles.push({ id: userId, society_id: null, full_name: fullName, phone: phone || null, role, avatar_color: 'blue' });
+  saveMemoryStore();
 
   const token = jwt.sign(
     { id: userId, email: cleanEmail, role, full_name: fullName, society_id: null },
@@ -327,36 +328,40 @@ router.post('/register-society', async (req, res) => {
   const societyCode = `SN-${Math.floor(10000 + Math.random() * 90000)}`;
   const fullAddress = address ? `${address}, ${city}` : city;
   const passwordHash = await bcrypt.hash(adminPassword, 10);
-  const normalizedFlatsCount = Math.min(Math.max(Number(flatsPerWing) || 8, 1), 250);
+  const totalTargetFlats = Math.min(Math.max(Number(flatsPerWing || (req.body as any).totalFlats) || 20, 1), 1000);
 
-  // 3. Generate Flats across wings
+  // 3. Generate Flats across wings (Exact Total Count)
   const wingList = Array.isArray(wings) && wings.length > 0 ? wings : ['A Wing', 'B Wing'];
   const generatedFlats: any[] = [];
   let firstFlatId: string | null = null;
+  let flatIndex = 0;
 
-  for (const wing of wingList) {
+  while (generatedFlats.length < totalTargetFlats) {
+    const wingIndex = flatIndex % wingList.length;
+    const wing = wingList[wingIndex];
     const wingLetter = wing.replace(' Wing', '').trim() || 'A';
-    for (let i = 1; i <= normalizedFlatsCount; i++) {
-      const flatId = genId('flat');
-      if (!firstFlatId) firstFlatId = flatId;
-      const floorNum = Math.ceil(i / 2);
-      const flatNum = `${wingLetter}-${floorNum}0${((i - 1) % 2) + 1}`;
-      const isFirst = generatedFlats.length === 0;
+    const flatNumInWing = Math.floor(flatIndex / wingList.length) + 1;
+    const floorNum = Math.ceil(flatNumInWing / 2);
+    const unitInFloor = ((flatNumInWing - 1) % 2) + 1;
+    const flatNum = `${wingLetter}-${floorNum}0${unitInFloor}`;
+    const flatId = genId('flat');
+    if (!firstFlatId) firstFlatId = flatId;
+    const isFirst = generatedFlats.length === 0;
 
-      const flatObj = {
-        id: flatId,
-        society_id: societyId,
-        flat_number: flatNum,
-        block: `${wingLetter} Wing`,
-        floor: `Floor ${floorNum}`,
-        area: '1,250 sq ft',
-        status: isFirst ? 'occupied' : 'vacant',
-        resident_name: isFirst ? adminName : null,
-        created_at: new Date().toISOString(),
-      };
-      generatedFlats.push(flatObj);
-      memoryStore.flats.push(flatObj);
-    }
+    const flatObj = {
+      id: flatId,
+      society_id: societyId,
+      flat_number: flatNum,
+      block: `${wingLetter} Wing`,
+      floor: `Floor ${floorNum}`,
+      area: '1,250 sq ft',
+      status: isFirst ? 'occupied' : 'vacant',
+      resident_name: isFirst ? adminName : null,
+      created_at: new Date().toISOString(),
+    };
+    generatedFlats.push(flatObj);
+    memoryStore.flats.push(flatObj);
+    flatIndex++;
   }
 
   // 4. Update Memory Store
@@ -405,6 +410,8 @@ router.post('/register-society', async (req, res) => {
       created_at: new Date().toISOString(),
     });
   }
+
+  saveMemoryStore();
 
   // 5. Try inserting into MySQL in background
   pool.getConnection().then(async (conn) => {

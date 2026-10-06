@@ -413,24 +413,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('society_view_mode', 'portal');
       localStorage.removeItem('society_demo_role');
 
-      // Sync with MySQL API if online
+      // Sync with Backend API
+      let finalSocietyCode = societyCode;
+      let finalTotalFlats = generatedFlats.length;
+
       try {
-        await api.auth.registerSociety(params);
-      } catch { }
+        const apiRes = await api.auth.registerSociety(params);
+        if (apiRes?.token) {
+          localStorage.setItem('society_auth_token', apiRes.token);
+          localStorage.setItem('jwt_token', apiRes.token);
+        }
+        if (apiRes?.credentials?.societyCode) {
+          finalSocietyCode = apiRes.credentials.societyCode;
+        }
+        if (apiRes?.credentials?.totalFlats) {
+          finalTotalFlats = apiRes.credentials.totalFlats;
+        }
+        if (apiRes?.user?.profile) {
+          setProfile(apiRes.user.profile);
+        }
+        if (apiRes?.user?.society) {
+          setSociety(apiRes.user.society);
+        }
+      } catch (err: any) {
+        console.warn('Backend register sync note:', err?.message || err);
+        // If the backend actively rejected with conflict, surface the error
+        if (err?.message && (err.message.includes('already registered') || err.message.includes('409') || err.message.includes('required'))) {
+          return {
+            error: err.message,
+            credentials: { societyCode: '', totalFlats: 0 },
+          };
+        }
+      }
 
       setProfile(newProfile);
       setSociety(newSociety);
       setSession({
         user: { id: adminId, email: params.adminEmail },
-        access_token: 'custom-auth-token',
+        access_token: localStorage.getItem('jwt_token') || 'custom-auth-token',
       });
       setLoading(false);
 
       return {
         error: null,
         credentials: {
-          societyCode,
-          totalFlats: generatedFlats.length,
+          societyCode: finalSocietyCode,
+          totalFlats: finalTotalFlats,
         },
       };
     } catch {

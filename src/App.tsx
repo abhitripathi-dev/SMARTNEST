@@ -84,6 +84,7 @@ import {
   useVisitors,
 } from './lib/hooks';
 import { dataStore } from './lib/dataStore';
+import { subscribeToRealtimeChanges, isSupabaseConfigured } from './lib/supabase';
 import { SmartNestLandingPage } from './components/SmartNestLandingPage';
 import { SocietyLogo } from './components/SocietyLogo';
 import { NotificationDropdown } from './components/NotificationDropdown';
@@ -272,6 +273,18 @@ function AppShell() {
     window.addEventListener('navigate-view', handleNav as EventListener);
     return () => window.removeEventListener('navigate-view', handleNav as EventListener);
   }, [navigate]);
+
+  // Real-Time Cloud Data Synchronization (Multi-Device Auto-Sync)
+  useEffect(() => {
+    if (!profile?.society_id || !isSupabaseConfigured) return;
+    const unsubscribe = subscribeToRealtimeChanges(profile.society_id, (table, payload) => {
+      console.log(`[Realtime Sync] ${table} updated:`, payload);
+      window.dispatchEvent(new Event('society-data-change'));
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [profile?.society_id]);
 
   if (loading) {
     return <LoadingState />;
