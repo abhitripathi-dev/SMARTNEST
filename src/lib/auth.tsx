@@ -408,28 +408,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const allSocieties = getLocal<Society[]>('societies', []);
       setLocal('societies', [newSociety, ...allSocieties.filter((s) => s.id !== societyId)]);
 
+      let serverToken = 'custom-auth-token';
+      let activeSocId = societyId;
+      let activeCode = societyCode;
+
+      // Sync with Backend API
+      try {
+        const regRes = await api.auth.registerSociety(params);
+        if (regRes?.token) {
+          serverToken = regRes.token;
+          localStorage.setItem('society_auth_token', regRes.token);
+          localStorage.setItem('jwt_token', regRes.token);
+        }
+        if (regRes?.user?.society?.id) {
+          activeSocId = regRes.user.society.id;
+          newSociety.id = activeSocId;
+          newProfile.society_id = activeSocId;
+          newAccount.societyId = activeSocId;
+        }
+        if (regRes?.credentials?.societyCode) {
+          activeCode = regRes.credentials.societyCode;
+          newSociety.code = activeCode;
+          newAccount.societyCode = activeCode;
+        }
+      } catch (err) {
+        console.warn('Backend society registration sync notice:', err);
+      }
+
       localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
-      localStorage.setItem('society_active_id', societyId);
+      localStorage.setItem('society_active_id', activeSocId);
       localStorage.setItem('society_view_mode', 'portal');
       localStorage.removeItem('society_demo_role');
-
-      // Sync with MySQL API if online
-      try {
-        await api.auth.registerSociety(params);
-      } catch {}
 
       setProfile(newProfile);
       setSociety(newSociety);
       setSession({
         user: { id: adminId, email: params.adminEmail },
-        access_token: 'custom-auth-token',
+        access_token: serverToken,
       });
       setLoading(false);
 
       return {
         error: null,
         credentials: {
-          societyCode,
+          societyCode: activeCode,
           totalFlats: generatedFlats.length,
         },
       };

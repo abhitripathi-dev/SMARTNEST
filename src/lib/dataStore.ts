@@ -400,20 +400,18 @@ export const dataStore = {
   residents: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        const remote = await api.residents.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const all = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
+          const others = all.filter((r) => r.society_id !== activeSocId);
+          setLocal('residents', [...remote, ...others], false);
+          return remote;
+        }
+      } catch {}
+
       const all = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
-      const localList = all.filter((r) => r.society_id === activeSocId);
-
-      // Fast background sync without blocking page render
-      api.residents
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('residents', data, false);
-          }
-        })
-        .catch(() => {});
-
-      return localList;
+      return all.filter((r) => r.society_id === activeSocId);
     },
 
     create: async (payload: {
@@ -514,11 +512,28 @@ export const dataStore = {
   // FLATS
   // ----------------------------------------------------------
   flats: {
-    list: async () => {
+    list: async (): Promise<(Flat & { resident_name: string | null })[]> => {
       const activeSocId = getActiveSocietyId();
+      const residents = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
+
+      try {
+        const remote = await api.flats.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const allFlats = getLocal<Flat[]>('flats', INITIAL_FLATS);
+          const others = allFlats.filter((f) => f.society_id !== activeSocId);
+          setLocal('flats', [...remote, ...others], false);
+          return remote.map((f: any) => {
+            const res = residents.find((r) => r.flat_id === f.id || r.flat_number === f.flat_number);
+            return {
+              ...f,
+              resident_name: f.resident_name || (res ? res.full_name : null),
+            };
+          });
+        }
+      } catch {}
+
       const allFlats = getLocal<Flat[]>('flats', INITIAL_FLATS);
       const societyFlats = allFlats.filter((f) => f.society_id === activeSocId);
-      const residents = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
 
       const localList = societyFlats.map((f) => {
         const res = residents.find((r) => r.flat_id === f.id || r.flat_number === f.flat_number);
@@ -527,16 +542,6 @@ export const dataStore = {
           resident_name: res ? res.full_name : null,
         };
       });
-
-      // Background sync from MySQL API
-      api.flats
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('flats', data, false);
-          }
-        })
-        .catch(() => {});
 
       return localList;
     },
@@ -605,20 +610,18 @@ export const dataStore = {
   bills: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        const remote = await api.bills.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const allBills = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
+          const others = allBills.filter((b) => b.society_id !== activeSocId);
+          setLocal('bills', [...remote, ...others], false);
+          return remote;
+        }
+      } catch {}
+
       const allBills = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
-      const localList = allBills.filter((b) => b.society_id === activeSocId);
-
-      // Background sync
-      api.bills
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('bills', data, false);
-          }
-        })
-        .catch(() => {});
-
-      return localList;
+      return allBills.filter((b) => b.society_id === activeSocId);
     },
 
     create: async (payload: {
@@ -716,20 +719,18 @@ export const dataStore = {
   complaints: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        const remote = await api.complaints.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const all = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
+          const others = all.filter((c) => c.society_id !== activeSocId);
+          setLocal('complaints', [...remote, ...others], false);
+          return remote;
+        }
+      } catch {}
+
       const all = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
-      const localList = all.filter((c) => c.society_id === activeSocId);
-
-      // Background sync
-      api.complaints
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('complaints', data, false);
-          }
-        })
-        .catch(() => {});
-
-      return localList;
+      return all.filter((c) => c.society_id === activeSocId);
     },
 
     create: async (payload: {
@@ -824,20 +825,18 @@ export const dataStore = {
   visitors: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        const remote = await api.visitors.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const all = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
+          const others = all.filter((v) => v.society_id !== activeSocId);
+          setLocal('visitors', [...remote, ...others], false);
+          return remote;
+        }
+      } catch {}
+
       const all = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
-      const localList = all.filter((v) => v.society_id === activeSocId);
-
-      // Background sync
-      api.visitors
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('visitors', data, false);
-          }
-        })
-        .catch(() => {});
-
-      return localList;
+      return all.filter((v) => v.society_id === activeSocId);
     },
 
     create: async (payload: {
@@ -924,20 +923,18 @@ export const dataStore = {
   facilities: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        const remote = await api.facilities.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const all = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
+          const others = all.filter((f) => f.society_id !== activeSocId);
+          setLocal('facilities', [...remote, ...others], false);
+          return remote;
+        }
+      } catch {}
+
       const all = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
-      const localList = all.filter((f) => f.society_id === activeSocId);
-
-      // Background sync
-      api.facilities
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('facilities', data, false);
-          }
-        })
-        .catch(() => {});
-
-      return localList;
+      return all.filter((f) => f.society_id === activeSocId);
     },
 
     create: async (payload: {
@@ -1090,20 +1087,18 @@ export const dataStore = {
   notifications: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        const remote = await api.notifications.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const all = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
+          const others = all.filter((n) => n.society_id !== activeSocId);
+          setLocal('notifications', [...remote, ...others], false);
+          return remote;
+        }
+      } catch {}
+
       const all = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
-      const localList = all.filter((n) => n.society_id === activeSocId);
-
-      // Background sync
-      api.notifications
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('notifications', data, false);
-          }
-        })
-        .catch(() => {});
-
-      return localList;
+      return all.filter((n) => n.society_id === activeSocId);
     },
 
     create: (payload: {
@@ -1167,10 +1162,20 @@ export const dataStore = {
   members: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
+      try {
+        const remote = await api.members.list(activeSocId);
+        if (Array.isArray(remote) && remote.length > 0) {
+          const all = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
+          const others = all.filter((m) => m.society_id !== activeSocId);
+          setLocal('members', [...remote, ...others], false);
+          return remote;
+        }
+      } catch {}
+
       const all = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       const isCustomSociety = activeSocId !== DEMO_SOCIETY_ID;
 
-      const localList = all.filter((m) => {
+      return all.filter((m) => {
         if (isCustomSociety) {
           if (m.id === 'usr-demo-admin-001' || m.id === 'usr-demo-staff-002' || m.id === 'usr-demo-resident-003') return false;
           if (m.full_name === 'Vikram Mehta' || m.full_name === 'Rajesh Sharma' || m.full_name === 'Pooja Iyer') return false;
@@ -1180,18 +1185,6 @@ export const dataStore = {
         }
         return m.society_id === DEMO_SOCIETY_ID || !m.society_id;
       });
-
-      // Background sync
-      api.members
-        .list(activeSocId)
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLocal('members', data, false);
-          }
-        })
-        .catch(() => {});
-
-      return localList;
     },
 
     create: async (payload: {
