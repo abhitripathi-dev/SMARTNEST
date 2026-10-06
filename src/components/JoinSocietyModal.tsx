@@ -55,13 +55,10 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
   useEffect(() => {
     if (!isOpen) return;
     dataStore.societies.list().then((list) => {
-      setSocietiesList(list);
-      if (list.length === 1 && !selectedSociety) {
-        setSelectedSociety(list[0]);
-        if (list[0].code) setSocietyCodeInput(list[0].code);
-      }
+      const realSocieties = list.filter((s) => s.id !== 'e7b1a234-5678-4321-8765-abcdef123456');
+      setSocietiesList(realSocieties.length > 0 ? realSocieties : list);
     });
-  }, [isOpen, selectedSociety]);
+  }, [isOpen]);
 
   // When selected society changes, load its flats
   useEffect(() => {
@@ -451,7 +448,7 @@ export function JoinSocietyModal({ isOpen, onClose, onSuccess }: Props) {
                         <option value="">— Or Select Society —</option>
                         {societiesList.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.name}
+                            {s.name} {s.code ? `(${s.code})` : ''}
                           </option>
                         ))}
                       </select>

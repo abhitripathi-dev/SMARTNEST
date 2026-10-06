@@ -26,6 +26,20 @@
       "password_hash": "$2b$10$D9PTUvQBPtLsi4PzFjo/2ufAIOOyJhsKtfAYs22VyHlq1f0XV2feG",
       "raw_password": "SunitaPassword@123",
       "society_id": "soc-muwwzj3b-8s891"
+    },
+    {
+      "id": "usr-muwx5bhl-b9ho8",
+      "email": "shivam123@gmail.com",
+      "password_hash": "$2b$10$x/WrdpzsTSNtJPmxG5ByG.tBWS67qmPZS045HCUUDrj1dyIJ8a0yi",
+      "raw_password": "abhi4321",
+      "society_id": "soc-muwx5bhl-sxf59"
+    },
+    {
+      "id": "usr-muwx6jkl-dfvhr",
+      "email": "shubham123@gmail.com",
+      "password_hash": "$2b$10$q6KeGPrUKJWoHi/Szyg9cOsxoUb1lS.bzVPW9rFtTxQdLUJ4hqM7.",
+      "raw_password": "abhi4321",
+      "society_id": "soc-muwx5bhl-sxf59"
     }
   ],
   "profiles": [
@@ -64,6 +78,24 @@
       "role": "resident",
       "avatar_color": "violet",
       "created_at": "2026-10-06T16:50:03.350Z"
+    },
+    {
+      "id": "usr-muwx5bhl-b9ho8",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "full_name": "shivam (Admin)",
+      "phone": "+91 1234567891",
+      "role": "admin",
+      "avatar_color": "teal",
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "usr-muwx6jkl-dfvhr",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "full_name": "shubham (Resident)",
+      "phone": "+91 1234567867",
+      "role": "resident",
+      "avatar_color": "violet",
+      "created_at": "2026-10-06T16:55:30.508Z"
     }
   ],
   "societies": [
@@ -90,6 +122,14 @@
       "code": "SN-72598",
       "created_by": "usr-muwwzj3b-hbv9p",
       "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "soc-muwx5bhl-sxf59",
+      "name": "bhamani sakul",
+      "address": "mumbai, Mumbai",
+      "code": "SN-64867",
+      "created_by": "usr-muwx5bhl-b9ho8",
+      "created_at": "2026-10-06T16:54:33.382Z"
     }
   ],
   "flats": [
@@ -378,6 +418,138 @@
       "status": "vacant",
       "resident_name": null,
       "created_at": "2026-10-06T16:50:03.293Z"
+    },
+    {
+      "id": "flat-muwx5bja-k5zp1",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "A-101",
+      "block": "A Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "occupied",
+      "resident_name": "shivam",
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-1of5j",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "B-101",
+      "block": "B Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-gvctd",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "A-102",
+      "block": "A Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-s2r5s",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "B-102",
+      "block": "B Wing",
+      "floor": "Floor 1",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-en7ce",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "A-201",
+      "block": "A Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-jjgnp",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "B-201",
+      "block": "B Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-sim29",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "A-202",
+      "block": "A Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-uo66p",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "B-202",
+      "block": "B Wing",
+      "floor": "Floor 2",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-frkca",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "A-301",
+      "block": "A Wing",
+      "floor": "Floor 3",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx5bja-rimui",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "B-301",
+      "block": "B Wing",
+      "floor": "Floor 3",
+      "area": "1,250 sq ft",
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "flat-muwx6jk1-9ux3",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_number": "A-106",
+      "block": "A Wing",
+      "floor": "1st Floor",
+      "area": "1,350 sq ft",
+      "status": "occupied",
+      "resident_name": "shubham",
+      "created_at": "2026-10-06T16:55:30.442Z"
+    },
+    {
+      "id": "flat-muwx6jm4-577w7",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "flat_number": "A-106",
+      "block": "A Wing",
+      "floor": "1st Floor",
+      "area": "1,250 sq ft",
+      "status": "occupied",
+      "resident_name": "shubham",
+      "created_at": "2026-10-06T16:55:30.508Z"
     }
   ],
   "residents": [
@@ -499,6 +671,47 @@
       "user_id": "usr-muwwzj52-0gmu9",
       "flat_number": "A-102",
       "created_at": "2026-10-06T16:50:03.350Z"
+    },
+    {
+      "id": "res-muwx5bja-t7lu9",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_id": "flat-muwx5bja-k5zp1",
+      "full_name": "shivam",
+      "phone": "+91 1234567891",
+      "email": "shivam123@gmail.com",
+      "type": "owner",
+      "status": "active",
+      "avatar_color": "teal",
+      "flat_number": "A-101",
+      "created_at": "2026-10-06T16:54:33.382Z"
+    },
+    {
+      "id": "res-muwx6jm4-3kaml",
+      "society_id": "soc-muwx5bhl-sxf59",
+      "flat_id": "flat-muwx6jm4-577w7",
+      "full_name": "shubham",
+      "phone": "+91 1234567867",
+      "email": "shubham123@gmail.com",
+      "type": "owner",
+      "status": "active",
+      "avatar_color": "violet",
+      "user_id": "usr-muwx6jkl-dfvhr",
+      "flat_number": "A-106",
+      "created_at": "2026-10-06T16:55:30.508Z"
+    },
+    {
+      "id": "res-muwx6jm9-nne2",
+      "society_id": "soc-muwx5bhc-qzis",
+      "flat_id": "flat-muwx6jk1-9ux3",
+      "full_name": "shubham",
+      "phone": "+91 1234567867",
+      "email": "shubham123@gmail.com",
+      "type": "owner",
+      "status": "active",
+      "avatar_color": "violet",
+      "user_id": null,
+      "flat_number": "A-106",
+      "created_at": "2026-10-06T16:55:30.517Z"
     }
   ],
   "bills": [
@@ -839,6 +1052,21 @@
       ],
       "avatar_color": "violet",
       "created_at": "2026-10-06T16:50:03.350Z"
+    },
+    {
+      "id": "usr-muwx6jkl-dfvhr",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "full_name": "shubham (Resident)",
+      "phone": "+91 1234567867",
+      "email": "shubham123@gmail.com",
+      "role": "resident",
+      "permissions": [
+        "complaints",
+        "facilities",
+        "bills"
+      ],
+      "avatar_color": "violet",
+      "created_at": "2026-10-06T16:55:30.508Z"
     }
   ],
   "leads": [

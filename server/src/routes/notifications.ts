@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authMiddleware, type AuthRequest } from '../middleware/auth';
+import { memoryStore, saveMemoryStore } from '../memoryStore';
 
 const router = Router();
 
@@ -25,10 +26,12 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
       ...r,
       read: Boolean(r.is_read),
     }));
-    res.json(mapped);
-  } catch (err: any) {
-    console.error('Fetch notifications error:', err);
-    res.status(500).json({ error: 'Failed to fetch notifications' });
+    return res.json(mapped);
+  } catch {
+    const notifs = (memoryStore.notifications || []).filter(
+      (n) => n.society_id === societyId && (!n.user_id || n.user_id === userId)
+    );
+    return res.json(notifs);
   }
 });
 

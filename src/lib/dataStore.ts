@@ -287,9 +287,31 @@ export const dataStore = {
   // ----------------------------------------------------------
   societies: {
     list: async (): Promise<Society[]> => {
+      // 1. Fetch live remote societies first
+      let remoteList: Society[] = [];
+      try {
+        remoteList = await api.societies.list();
+      } catch { }
+
       const stored = getLocal<Society[]>('societies', []);
       const accounts = getLocal<Record<string, unknown>[]>('accounts', []);
-      const combined: Society[] = [...stored];
+      const combined: Society[] = [];
+
+      // Add remote registered societies first
+      if (Array.isArray(remoteList)) {
+        remoteList.forEach((r) => {
+          if (!combined.some((s) => s.id === r.id)) {
+            combined.push(r);
+          }
+        });
+      }
+
+      // Add local stored societies
+      stored.forEach((st) => {
+        if (!combined.some((s) => s.id === st.id)) {
+          combined.push(st);
+        }
+      });
 
       accounts.forEach((acc) => {
         const soc = acc.society as Society | undefined;
@@ -315,8 +337,9 @@ export const dataStore = {
         }
       } catch { }
 
+      // Append demo society at the end if needed
       if (!combined.some((s) => s.id === DEMO_SOCIETY_ID)) {
-        combined.unshift({
+        combined.push({
           id: DEMO_SOCIETY_ID,
           name: 'SmartNest Heights (Demo)',
           address: 'Tower 4, Palm Avenue, Sector 54, Mumbai',
@@ -326,21 +349,7 @@ export const dataStore = {
         });
       }
 
-      // Background sync from backend if available
-      api.societies
-        .list()
-        .then((remoteList) => {
-          if (Array.isArray(remoteList) && remoteList.length > 0) {
-            const current = getLocal<Society[]>('societies', []);
-            const merged = [...current];
-            remoteList.forEach((r) => {
-              if (!merged.some((m) => m.id === r.id)) merged.push(r);
-            });
-            setLocal('societies', merged, false);
-          }
-        })
-        .catch(() => { });
-
+      setLocal('societies', combined, false);
       return combined;
     },
 
