@@ -55,7 +55,21 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/societies', societiesRoutes);
 
-// Catch-all for 404s
+import fs from 'fs';
+
+// Serve frontend static build if dist directory exists
+const distPath = path.resolve(__dirname, '../../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.resolve(distPath, 'index.html'));
+  });
+}
+
+// Catch-all for 404s on API endpoints
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found', path: req.originalUrl });
 });
