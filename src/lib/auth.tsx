@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (custom.profile) {
           return { user: { id: custom.profile.id, email: custom.email }, access_token: 'custom-auth-token' };
         }
-      } catch {}
+      } catch { }
     }
     const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
     if (DEMO_PROFILES[storedDemo]) {
@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const custom = JSON.parse(customRaw);
         if (custom.profile) return custom.profile;
-      } catch {}
+      } catch { }
     }
     const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
     return DEMO_PROFILES[storedDemo]?.profile || DEMO_PROFILES.admin.profile;
@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const custom = JSON.parse(customRaw);
         if (custom.society) return custom.society;
-      } catch {}
+      } catch { }
     }
     const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
     return DEMO_PROFILES[storedDemo]?.society || DEMO_PROFILES.admin.society;
@@ -206,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSociety(me.society);
           return;
         }
-      } catch {}
+      } catch { }
 
       // 3. Demo fallback
       const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
@@ -243,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (me.society?.id) localStorage.setItem('society_active_id', me.society.id);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
 
     const syncCurrentAuth = () => {
@@ -261,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('society_active_id', custom.societyId);
             return;
           }
-        } catch {}
+        } catch { }
       }
 
       const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
@@ -360,33 +360,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString(),
       };
 
-      // Generate Starter Flats across all configured wings (exact total count)
+      // Generate Starter Flats across all configured wings (up to 250 flats/wing)
       const generatedFlats: Flat[] = [];
       const cleanWings = params.wings.length > 0 ? params.wings : ['A Wing', 'B Wing'];
-      const totalRequestedFlats = Math.min(Math.max(Number(params.flatsPerWing) || 20, 1), 1000);
-      let fIndex = 0;
+      const flatsCount = Math.min(Math.max(Number(params.flatsPerWing) || 8, 1), 250);
 
-      while (generatedFlats.length < totalRequestedFlats) {
-        const wingIndex = fIndex % cleanWings.length;
-        const wing = cleanWings[wingIndex];
+      cleanWings.forEach((wing) => {
         const wingLetter = wing.replace(' Wing', '').trim() || 'A';
-        const flatNumInWing = Math.floor(fIndex / cleanWings.length) + 1;
-        const floor = Math.ceil(flatNumInWing / 2);
-        const unit = ((flatNumInWing - 1) % 2) + 1;
-        const flatNum = `${wingLetter}-${floor}0${unit}`;
-
-        generatedFlats.push({
-          id: `flat-${wingLetter.toLowerCase()}-${floor}0${unit}-${Date.now().toString(36)}-${fIndex}`,
-          society_id: societyId,
-          flat_number: flatNum,
-          block: `${wingLetter} Wing`,
-          floor: `${floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`} Floor`,
-          area: '1,250 sq ft',
-          status: generatedFlats.length === 0 ? 'occupied' : 'vacant',
-          created_at: new Date().toISOString(),
-        });
-        fIndex++;
-      }
+        for (let floor = 1; floor <= Math.ceil(flatsCount / 2); floor++) {
+          for (let f = 1; f <= 2; f++) {
+            if (generatedFlats.length >= cleanWings.length * flatsCount) break;
+            const flatNum = `${wingLetter}-${floor}0${f}`;
+            generatedFlats.push({
+              id: `flat-${wingLetter.toLowerCase()}-${floor}0${f}-${Date.now().toString(36)}`,
+              society_id: societyId,
+              flat_number: flatNum,
+              block: `${wingLetter} Wing`,
+              floor: `${floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`} Floor`,
+              area: '1,250 sq ft',
+              status: generatedFlats.length === 0 ? 'occupied' : 'vacant',
+              created_at: new Date().toISOString(),
+            });
+          }
+        }
+      });
 
       // Initialize society in local store & persistent registry
       dataStore.initializeSociety(newSociety, newProfile, generatedFlats, {
@@ -411,50 +408,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const allSocieties = getLocal<Society[]>('societies', []);
       setLocal('societies', [newSociety, ...allSocieties.filter((s) => s.id !== societyId)]);
 
-      let serverToken = 'custom-auth-token';
-      let activeSocId = societyId;
-      let activeCode = societyCode;
-
-      // Sync with Backend API
-      try {
-        const regRes = await api.auth.registerSociety(params);
-        if (regRes?.token) {
-          serverToken = regRes.token;
-          localStorage.setItem('society_auth_token', regRes.token);
-          localStorage.setItem('jwt_token', regRes.token);
-        }
-        if (regRes?.user?.society?.id) {
-          activeSocId = regRes.user.society.id;
-          newSociety.id = activeSocId;
-          newProfile.society_id = activeSocId;
-          newAccount.societyId = activeSocId;
-        }
-        if (regRes?.credentials?.societyCode) {
-          activeCode = regRes.credentials.societyCode;
-          newSociety.code = activeCode;
-          newAccount.societyCode = activeCode;
-        }
-      } catch (err) {
-        console.warn('Backend society registration sync notice:', err);
-      }
-
       localStorage.setItem('society_custom_registered', JSON.stringify(newAccount));
-      localStorage.setItem('society_active_id', activeSocId);
+      localStorage.setItem('society_active_id', societyId);
       localStorage.setItem('society_view_mode', 'portal');
       localStorage.removeItem('society_demo_role');
+
+      // Sync with MySQL API if online
+      try {
+        await api.auth.registerSociety(params);
+      } catch { }
 
       setProfile(newProfile);
       setSociety(newSociety);
       setSession({
         user: { id: adminId, email: params.adminEmail },
-        access_token: serverToken,
+        access_token: 'custom-auth-token',
       });
       setLoading(false);
 
       return {
         error: null,
         credentials: {
-          societyCode: activeCode,
+          societyCode,
           totalFlats: generatedFlats.length,
         },
       };
@@ -539,7 +514,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-    } catch {}
+    } catch { }
 
     // 3. Check staff/resident accounts created in society members
     const members = getLocal<Array<SocietyMember & { password?: string }>>('members', []);
@@ -617,7 +592,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('jwt_token', res.token);
         return { error: null };
       }
-    } catch {}
+    } catch { }
 
     // Local signup fallback
     const adminId = `usr-${Date.now()}`;
@@ -751,12 +726,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const custom = JSON.parse(customRaw);
         custom.profile = updatedProfile;
         localStorage.setItem('society_custom_registered', JSON.stringify(custom));
-      } catch {}
+      } catch { }
     }
 
     try {
       await api.auth.updateProfile(updates);
-    } catch {}
+    } catch { }
 
     return { error: null };
   };
@@ -773,7 +748,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const custom = JSON.parse(customRaw);
         custom.society = updatedSociety;
         localStorage.setItem('society_custom_registered', JSON.stringify(custom));
-      } catch {}
+      } catch { }
     }
 
     return { error: null };

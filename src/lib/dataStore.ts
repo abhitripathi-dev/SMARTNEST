@@ -40,7 +40,7 @@ export function getActiveSocietyId(): string {
       const custom = JSON.parse(customRaw);
       if (custom.societyId) return custom.societyId;
     }
-  } catch {}
+  } catch { }
   return DEMO_SOCIETY_ID;
 }
 
@@ -141,7 +141,7 @@ export function setLocal<T>(key: string, value: T, notify = true): void {
 export function notifyDataChange(entity: string): void {
   try {
     window.dispatchEvent(new CustomEvent('society-data-change', { detail: { entity, timestamp: Date.now() } }));
-  } catch {}
+  } catch { }
 }
 
 function generateId(prefix: string): string {
@@ -313,7 +313,7 @@ export const dataStore = {
             });
           }
         }
-      } catch {}
+      } catch { }
 
       if (!combined.some((s) => s.id === DEMO_SOCIETY_ID)) {
         combined.unshift({
@@ -339,7 +339,7 @@ export const dataStore = {
             setLocal('societies', merged, false);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
 
       return combined;
     },
@@ -351,7 +351,7 @@ export const dataStore = {
       try {
         const remote = await api.societies.getByCodeOrId(id);
         if (remote) return remote;
-      } catch {}
+      } catch { }
       return null;
     },
 
@@ -363,7 +363,7 @@ export const dataStore = {
       try {
         const remote = await api.societies.getByCodeOrId(clean);
         if (remote) return remote;
-      } catch {}
+      } catch { }
       return null;
     },
 
@@ -388,7 +388,7 @@ export const dataStore = {
       try {
         const remote = await api.societies.getByCodeOrId(term.trim());
         if (remote) return remote;
-      } catch {}
+      } catch { }
 
       return null;
     },
@@ -400,18 +400,20 @@ export const dataStore = {
   residents: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      try {
-        const remote = await api.residents.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const all = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
-          const others = all.filter((r) => r.society_id !== activeSocId);
-          setLocal('residents', [...remote, ...others], false);
-          return remote;
-        }
-      } catch {}
-
       const all = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
-      return all.filter((r) => r.society_id === activeSocId);
+      const localList = all.filter((r) => r.society_id === activeSocId);
+
+      // Fast background sync without blocking page render
+      api.residents
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('residents', data, false);
+          }
+        })
+        .catch(() => { });
+
+      return localList;
     },
 
     create: async (payload: {
@@ -455,7 +457,7 @@ export const dataStore = {
           status: payload.status || 'active',
           avatar_color: newResident.avatar_color,
         });
-      } catch {}
+      } catch { }
 
       const list = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
       const updated = [newResident, ...list];
@@ -472,7 +474,7 @@ export const dataStore = {
     update: async (id: string, updates: Partial<Resident & { flat_number?: string | null }>) => {
       try {
         await api.residents.update(id, updates);
-      } catch {}
+      } catch { }
 
       const flats = getLocal<Flat[]>('flats', INITIAL_FLATS);
       let assignedFlatNumber: string | null = null;
@@ -500,7 +502,7 @@ export const dataStore = {
     delete: async (id: string) => {
       try {
         await api.residents.delete(id);
-      } catch {}
+      } catch { }
       const list = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
       const updated = list.filter((r) => r.id !== id);
       setLocal('residents', updated);
@@ -512,28 +514,11 @@ export const dataStore = {
   // FLATS
   // ----------------------------------------------------------
   flats: {
-    list: async (): Promise<(Flat & { resident_name: string | null })[]> => {
+    list: async () => {
       const activeSocId = getActiveSocietyId();
-      const residents = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
-
-      try {
-        const remote = await api.flats.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const allFlats = getLocal<Flat[]>('flats', INITIAL_FLATS);
-          const others = allFlats.filter((f) => f.society_id !== activeSocId);
-          setLocal('flats', [...remote, ...others], false);
-          return remote.map((f: any) => {
-            const res = residents.find((r) => r.flat_id === f.id || r.flat_number === f.flat_number);
-            return {
-              ...f,
-              resident_name: f.resident_name || (res ? res.full_name : null),
-            };
-          });
-        }
-      } catch {}
-
       const allFlats = getLocal<Flat[]>('flats', INITIAL_FLATS);
       const societyFlats = allFlats.filter((f) => f.society_id === activeSocId);
+      const residents = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
 
       const localList = societyFlats.map((f) => {
         const res = residents.find((r) => r.flat_id === f.id || r.flat_number === f.flat_number);
@@ -542,6 +527,16 @@ export const dataStore = {
           resident_name: res ? res.full_name : null,
         };
       });
+
+      // Background sync from MySQL API
+      api.flats
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('flats', data, false);
+          }
+        })
+        .catch(() => { });
 
       return localList;
     },
@@ -576,7 +571,7 @@ export const dataStore = {
           area: payload.area,
           status: payload.status,
         });
-      } catch {}
+      } catch { }
 
       const list = getLocal<Flat[]>('flats', INITIAL_FLATS);
       setLocal('flats', [newFlat, ...list]);
@@ -586,7 +581,7 @@ export const dataStore = {
     update: async (id: string, updates: Partial<Flat>) => {
       try {
         await api.flats.update(id, updates);
-      } catch {}
+      } catch { }
 
       const list = getLocal<Flat[]>('flats', INITIAL_FLATS);
       const updated = list.map((f) => (f.id === id ? { ...f, ...updates } : f));
@@ -597,7 +592,7 @@ export const dataStore = {
     delete: async (id: string) => {
       try {
         await api.flats.delete(id);
-      } catch {}
+      } catch { }
       const list = getLocal<Flat[]>('flats', INITIAL_FLATS);
       setLocal('flats', list.filter((f) => f.id !== id));
       return { error: null };
@@ -610,18 +605,20 @@ export const dataStore = {
   bills: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      try {
-        const remote = await api.bills.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const allBills = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
-          const others = allBills.filter((b) => b.society_id !== activeSocId);
-          setLocal('bills', [...remote, ...others], false);
-          return remote;
-        }
-      } catch {}
-
       const allBills = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
-      return allBills.filter((b) => b.society_id === activeSocId);
+      const localList = allBills.filter((b) => b.society_id === activeSocId);
+
+      // Background sync
+      api.bills
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('bills', data, false);
+          }
+        })
+        .catch(() => { });
+
+      return localList;
     },
 
     create: async (payload: {
@@ -667,7 +664,7 @@ export const dataStore = {
           due_date: newBill.due_date,
           paid_at: newBill.paid_at,
         });
-      } catch {}
+      } catch { }
 
       const list = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
       setLocal('bills', [newBill, ...list]);
@@ -685,7 +682,7 @@ export const dataStore = {
     markPaid: async (id: string) => {
       try {
         await api.bills.pay(id);
-      } catch {}
+      } catch { }
 
       const list = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
       const updated = list.map((b) => {
@@ -706,7 +703,7 @@ export const dataStore = {
     delete: async (id: string) => {
       try {
         await api.bills.delete(id);
-      } catch {}
+      } catch { }
       const list = getLocal<(MaintenanceBill & { flat_number: string | null; resident_name: string | null })[]>('bills', INITIAL_BILLS);
       setLocal('bills', list.filter((b) => b.id !== id));
       return { error: null };
@@ -719,18 +716,20 @@ export const dataStore = {
   complaints: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      try {
-        const remote = await api.complaints.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const all = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
-          const others = all.filter((c) => c.society_id !== activeSocId);
-          setLocal('complaints', [...remote, ...others], false);
-          return remote;
-        }
-      } catch {}
-
       const all = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
-      return all.filter((c) => c.society_id === activeSocId);
+      const localList = all.filter((c) => c.society_id === activeSocId);
+
+      // Background sync
+      api.complaints
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('complaints', data, false);
+          }
+        })
+        .catch(() => { });
+
+      return localList;
     },
 
     create: async (payload: {
@@ -773,7 +772,7 @@ export const dataStore = {
           priority: payload.priority || 'medium',
           status: 'open',
         });
-      } catch {}
+      } catch { }
 
       const list = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
       setLocal('complaints', [newComplaint, ...list]);
@@ -791,7 +790,7 @@ export const dataStore = {
     updateStatus: async (id: string, status: 'open' | 'in_progress' | 'resolved') => {
       try {
         await api.complaints.updateStatus(id, status);
-      } catch {}
+      } catch { }
 
       const list = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
       const updated = list.map((c) => {
@@ -812,7 +811,7 @@ export const dataStore = {
     delete: async (id: string) => {
       try {
         await api.complaints.delete(id);
-      } catch {}
+      } catch { }
       const list = getLocal<(Complaint & { resident_name?: string; flat_number?: string })[]>('complaints', INITIAL_COMPLAINTS);
       setLocal('complaints', list.filter((c) => c.id !== id));
       return { error: null };
@@ -825,18 +824,20 @@ export const dataStore = {
   visitors: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      try {
-        const remote = await api.visitors.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const all = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
-          const others = all.filter((v) => v.society_id !== activeSocId);
-          setLocal('visitors', [...remote, ...others], false);
-          return remote;
-        }
-      } catch {}
-
       const all = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
-      return all.filter((v) => v.society_id === activeSocId);
+      const localList = all.filter((v) => v.society_id === activeSocId);
+
+      // Background sync
+      api.visitors
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('visitors', data, false);
+          }
+        })
+        .catch(() => { });
+
+      return localList;
     },
 
     create: async (payload: {
@@ -876,7 +877,7 @@ export const dataStore = {
           photo_url: payload.photo_url || null,
           entry_time: newVisitor.entry_time,
         });
-      } catch {}
+      } catch { }
 
       const list = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
       setLocal('visitors', [newVisitor, ...list]);
@@ -895,7 +896,7 @@ export const dataStore = {
       const exitTime = new Date().toISOString();
       try {
         await api.visitors.exit(id);
-      } catch {}
+      } catch { }
 
       const list = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
       const updated = list.map((v) => (v.id === id ? { ...v, exit_time: exitTime } : v));
@@ -910,7 +911,7 @@ export const dataStore = {
     delete: async (id: string) => {
       try {
         await api.visitors.delete(id);
-      } catch {}
+      } catch { }
       const list = getLocal<(Visitor & { flat_number: string | null })[]>('visitors', INITIAL_VISITORS);
       setLocal('visitors', list.filter((v) => v.id !== id));
       return { error: null };
@@ -923,18 +924,20 @@ export const dataStore = {
   facilities: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      try {
-        const remote = await api.facilities.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const all = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
-          const others = all.filter((f) => f.society_id !== activeSocId);
-          setLocal('facilities', [...remote, ...others], false);
-          return remote;
-        }
-      } catch {}
-
       const all = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
-      return all.filter((f) => f.society_id === activeSocId);
+      const localList = all.filter((f) => f.society_id === activeSocId);
+
+      // Background sync
+      api.facilities
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('facilities', data, false);
+          }
+        })
+        .catch(() => { });
+
+      return localList;
     },
 
     create: async (payload: {
@@ -963,7 +966,7 @@ export const dataStore = {
           status: payload.status,
           open_until: payload.open_until,
         });
-      } catch {}
+      } catch { }
 
       const list = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
       setLocal('facilities', [newFacility, ...list]);
@@ -973,7 +976,7 @@ export const dataStore = {
     update: async (id: string, updates: Partial<Facility>) => {
       try {
         await api.facilities.update(id, updates);
-      } catch {}
+      } catch { }
 
       const list = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
       setLocal(
@@ -986,7 +989,7 @@ export const dataStore = {
     delete: async (id: string) => {
       try {
         await api.facilities.delete(id);
-      } catch {}
+      } catch { }
       const list = getLocal<Facility[]>('facilities', INITIAL_FACILITIES);
       setLocal('facilities', list.filter((f) => f.id !== id));
       return { error: null };
@@ -1007,7 +1010,7 @@ export const dataStore = {
             setLocal('bookings', data, false);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
 
       if (facilityId) {
         return socBookings.filter((b) => b.facility_id === facilityId);
@@ -1037,7 +1040,7 @@ export const dataStore = {
 
       try {
         await api.facilities.bookings.create(newBooking);
-      } catch {}
+      } catch { }
 
       const list = getLocal<FacilityBooking[]>('bookings', INITIAL_BOOKINGS);
       setLocal('bookings', [newBooking, ...list]);
@@ -1087,18 +1090,20 @@ export const dataStore = {
   notifications: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      try {
-        const remote = await api.notifications.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const all = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
-          const others = all.filter((n) => n.society_id !== activeSocId);
-          setLocal('notifications', [...remote, ...others], false);
-          return remote;
-        }
-      } catch {}
-
       const all = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
-      return all.filter((n) => n.society_id === activeSocId);
+      const localList = all.filter((n) => n.society_id === activeSocId);
+
+      // Background sync
+      api.notifications
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('notifications', data, false);
+          }
+        })
+        .catch(() => { });
+
+      return localList;
     },
 
     create: (payload: {
@@ -1123,7 +1128,7 @@ export const dataStore = {
 
       try {
         api.notifications.create(newNotif);
-      } catch {}
+      } catch { }
 
       const list = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
       setLocal('notifications', [newNotif, ...list]);
@@ -1133,7 +1138,7 @@ export const dataStore = {
     markRead: async (id: string) => {
       try {
         await api.notifications.markRead(id);
-      } catch {}
+      } catch { }
 
       const list = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
       setLocal(
@@ -1146,7 +1151,7 @@ export const dataStore = {
       const activeSocId = getActiveSocietyId();
       try {
         await api.notifications.markAllRead(activeSocId);
-      } catch {}
+      } catch { }
 
       const list = getLocal<Notification[]>('notifications', INITIAL_NOTIFICATIONS);
       setLocal(
@@ -1162,20 +1167,10 @@ export const dataStore = {
   members: {
     list: async () => {
       const activeSocId = getActiveSocietyId();
-      try {
-        const remote = await api.members.list(activeSocId);
-        if (Array.isArray(remote) && remote.length > 0) {
-          const all = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
-          const others = all.filter((m) => m.society_id !== activeSocId);
-          setLocal('members', [...remote, ...others], false);
-          return remote;
-        }
-      } catch {}
-
       const all = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       const isCustomSociety = activeSocId !== DEMO_SOCIETY_ID;
 
-      return all.filter((m) => {
+      const localList = all.filter((m) => {
         if (isCustomSociety) {
           if (m.id === 'usr-demo-admin-001' || m.id === 'usr-demo-staff-002' || m.id === 'usr-demo-resident-003') return false;
           if (m.full_name === 'Vikram Mehta' || m.full_name === 'Rajesh Sharma' || m.full_name === 'Pooja Iyer') return false;
@@ -1185,6 +1180,18 @@ export const dataStore = {
         }
         return m.society_id === DEMO_SOCIETY_ID || !m.society_id;
       });
+
+      // Background sync
+      api.members
+        .list(activeSocId)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocal('members', data, false);
+          }
+        })
+        .catch(() => { });
+
+      return localList;
     },
 
     create: async (payload: {
@@ -1201,8 +1208,8 @@ export const dataStore = {
         payload.role === 'admin'
           ? ['all', 'gate_entry', 'visitor_logs', 'deliveries', 'complaints', 'facilities', 'bills', 'members', 'flats', 'settings']
           : payload.role === 'staff'
-          ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
-          : ['complaints', 'facilities', 'bills']
+            ? ['gate_entry', 'visitor_logs', 'deliveries', 'complaints']
+            : ['complaints', 'facilities', 'bills']
       );
 
       const newMember: SocietyMember = {
@@ -1219,7 +1226,7 @@ export const dataStore = {
 
       try {
         await api.members.create(newMember);
-      } catch {}
+      } catch { }
 
       const list = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       setLocal('members', [newMember, ...list]);
@@ -1237,7 +1244,7 @@ export const dataStore = {
     updateRole: async (id: string, newRole: Role) => {
       try {
         await api.members.updateRole(id, newRole);
-      } catch {}
+      } catch { }
 
       const list = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       const updated = list.map((m) => {
@@ -1272,7 +1279,7 @@ export const dataStore = {
     delete: async (id: string) => {
       try {
         await api.members.delete(id);
-      } catch {}
+      } catch { }
       const list = getLocal<SocietyMember[]>('members', INITIAL_MEMBERS);
       setLocal('members', list.filter((m) => m.id !== id));
       return { error: null };
@@ -1287,7 +1294,7 @@ export const dataStore = {
       try {
         const leads = await api.leads.list();
         if (Array.isArray(leads) && leads.length > 0) return leads;
-      } catch {}
+      } catch { }
       return getLocal<DemoLead[]>('demo_leads', []);
     },
 
@@ -1299,7 +1306,7 @@ export const dataStore = {
       };
       try {
         await api.leads.create(newLead);
-      } catch {}
+      } catch { }
       const list = getLocal<DemoLead[]>('demo_leads', []);
       setLocal('demo_leads', [newLead, ...list]);
       return newLead;

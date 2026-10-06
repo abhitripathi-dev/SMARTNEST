@@ -28,46 +28,19 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   }
 
   const token = authHeader.substring(7);
-  if (!token || token === 'custom-auth-token' || token === 'demo-token' || token.startsWith('sig_')) {
-    req.user = {
-      id: 'usr-demo-admin-001',
-      email: 'admin@smartnest.community',
-      society_id: (req.headers['x-society-id'] as string) || (req.query.society_id as string) || 'e7b1a234-5678-4321-8765-abcdef123456',
-      role: 'admin',
-      full_name: 'Administrator',
-    };
-    return next();
-  }
-
   try {
-    let decoded: any = null;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch {
-      decoded = jwt.decode(token);
-    }
-
-    if (decoded && typeof decoded === 'object') {
-      req.user = {
-        id: decoded.id || decoded.sub || 'usr-demo-admin-001',
-        email: decoded.email || 'admin@smartnest.community',
-        society_id: decoded.society_id || decoded.societyId || 'e7b1a234-5678-4321-8765-abcdef123456',
-        role: decoded.role || 'admin',
-        full_name: decoded.full_name || decoded.fullName || 'User',
-      };
-      return next();
-    }
-    
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
     req.user = {
-      id: 'usr-demo-admin-001',
-      email: 'admin@smartnest.community',
-      society_id: 'e7b1a234-5678-4321-8765-abcdef123456',
-      role: 'admin',
-      full_name: 'User',
+      id: decoded.id || decoded.sub || 'usr-demo-admin-001',
+      email: decoded.email || 'admin@smartnest.community',
+      society_id: decoded.society_id || decoded.societyId || 'e7b1a234-5678-4321-8765-abcdef123456',
+      role: decoded.role || 'admin',
+      full_name: decoded.full_name || decoded.fullName || 'User',
     };
     next();
-  } catch {
-    next();
+  } catch (err) {
+    // If invalid token, return 401
+    res.status(401).json({ error: 'Unauthorized: Invalid or expired JWT token' });
   }
 }
 
