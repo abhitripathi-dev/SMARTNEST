@@ -360,30 +360,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString(),
       };
 
-      // Generate Starter Flats across all configured wings (up to 250 flats/wing)
+      // Generate Starter Flats across all configured wings (exact total count)
       const generatedFlats: Flat[] = [];
       const cleanWings = params.wings.length > 0 ? params.wings : ['A Wing', 'B Wing'];
-      const flatsCount = Math.min(Math.max(Number(params.flatsPerWing) || 8, 1), 250);
+      const totalRequestedFlats = Math.min(Math.max(Number(params.flatsPerWing) || 20, 1), 1000);
+      let fIndex = 0;
 
-      cleanWings.forEach((wing) => {
+      while (generatedFlats.length < totalRequestedFlats) {
+        const wingIndex = fIndex % cleanWings.length;
+        const wing = cleanWings[wingIndex];
         const wingLetter = wing.replace(' Wing', '').trim() || 'A';
-        for (let floor = 1; floor <= Math.ceil(flatsCount / 2); floor++) {
-          for (let f = 1; f <= 2; f++) {
-            if (generatedFlats.length >= cleanWings.length * flatsCount) break;
-            const flatNum = `${wingLetter}-${floor}0${f}`;
-            generatedFlats.push({
-              id: `flat-${wingLetter.toLowerCase()}-${floor}0${f}-${Date.now().toString(36)}`,
-              society_id: societyId,
-              flat_number: flatNum,
-              block: `${wingLetter} Wing`,
-              floor: `${floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`} Floor`,
-              area: '1,250 sq ft',
-              status: generatedFlats.length === 0 ? 'occupied' : 'vacant',
-              created_at: new Date().toISOString(),
-            });
-          }
-        }
-      });
+        const flatNumInWing = Math.floor(fIndex / cleanWings.length) + 1;
+        const floor = Math.ceil(flatNumInWing / 2);
+        const unit = ((flatNumInWing - 1) % 2) + 1;
+        const flatNum = `${wingLetter}-${floor}0${unit}`;
+
+        generatedFlats.push({
+          id: `flat-${wingLetter.toLowerCase()}-${floor}0${unit}-${Date.now().toString(36)}-${fIndex}`,
+          society_id: societyId,
+          flat_number: flatNum,
+          block: `${wingLetter} Wing`,
+          floor: `${floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`} Floor`,
+          area: '1,250 sq ft',
+          status: generatedFlats.length === 0 ? 'occupied' : 'vacant',
+          created_at: new Date().toISOString(),
+        });
+        fIndex++;
+      }
 
       // Initialize society in local store & persistent registry
       dataStore.initializeSociety(newSociety, newProfile, generatedFlats, {

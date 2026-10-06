@@ -349,13 +349,13 @@ export function SocietyRegistrationModal({ isOpen, onClose, onSuccess }: Props) 
               </label>
 
               <label className="auth-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Flats / Wing (1–250)</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Total Flats (e.g. 195)</span>
                 <input
                   type="number"
                   min="1"
-                  max="250"
+                  max="1000"
                   value={flatsPerWing}
-                  onChange={(e) => setFlatsPerWing(Math.min(Math.max(Number(e.target.value) || 1, 1), 250))}
+                  onChange={(e) => setFlatsPerWing(Math.min(Math.max(Number(e.target.value) || 1, 1), 1000))}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 14 }}
                 />
               </label>

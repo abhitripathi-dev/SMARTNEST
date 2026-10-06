@@ -327,36 +327,40 @@ router.post('/register-society', async (req, res) => {
   const societyCode = `SN-${Math.floor(10000 + Math.random() * 90000)}`;
   const fullAddress = address ? `${address}, ${city}` : city;
   const passwordHash = await bcrypt.hash(adminPassword, 10);
-  const normalizedFlatsCount = Math.min(Math.max(Number(flatsPerWing) || 8, 1), 250);
+  const totalTargetFlats = Math.min(Math.max(Number(flatsPerWing || (req.body as any).totalFlats) || 20, 1), 1000);
 
-  // 3. Generate Flats across wings
+  // 3. Generate Flats across wings (Exact Total Count)
   const wingList = Array.isArray(wings) && wings.length > 0 ? wings : ['A Wing', 'B Wing'];
   const generatedFlats: any[] = [];
   let firstFlatId: string | null = null;
+  let flatIndex = 0;
 
-  for (const wing of wingList) {
+  while (generatedFlats.length < totalTargetFlats) {
+    const wingIndex = flatIndex % wingList.length;
+    const wing = wingList[wingIndex];
     const wingLetter = wing.replace(' Wing', '').trim() || 'A';
-    for (let i = 1; i <= normalizedFlatsCount; i++) {
-      const flatId = genId('flat');
-      if (!firstFlatId) firstFlatId = flatId;
-      const floorNum = Math.ceil(i / 2);
-      const flatNum = `${wingLetter}-${floorNum}0${((i - 1) % 2) + 1}`;
-      const isFirst = generatedFlats.length === 0;
+    const flatNumInWing = Math.floor(flatIndex / wingList.length) + 1;
+    const floorNum = Math.ceil(flatNumInWing / 2);
+    const unitInFloor = ((flatNumInWing - 1) % 2) + 1;
+    const flatNum = `${wingLetter}-${floorNum}0${unitInFloor}`;
+    const flatId = genId('flat');
+    if (!firstFlatId) firstFlatId = flatId;
+    const isFirst = generatedFlats.length === 0;
 
-      const flatObj = {
-        id: flatId,
-        society_id: societyId,
-        flat_number: flatNum,
-        block: `${wingLetter} Wing`,
-        floor: `Floor ${floorNum}`,
-        area: '1,250 sq ft',
-        status: isFirst ? 'occupied' : 'vacant',
-        resident_name: isFirst ? adminName : null,
-        created_at: new Date().toISOString(),
-      };
-      generatedFlats.push(flatObj);
-      memoryStore.flats.push(flatObj);
-    }
+    const flatObj = {
+      id: flatId,
+      society_id: societyId,
+      flat_number: flatNum,
+      block: `${wingLetter} Wing`,
+      floor: `Floor ${floorNum}`,
+      area: '1,250 sq ft',
+      status: isFirst ? 'occupied' : 'vacant',
+      resident_name: isFirst ? adminName : null,
+      created_at: new Date().toISOString(),
+    };
+    generatedFlats.push(flatObj);
+    memoryStore.flats.push(flatObj);
+    flatIndex++;
   }
 
   // 4. Update Memory Store
@@ -390,9 +394,11 @@ router.post('/register-society', async (req, res) => {
   };
   memoryStore.profiles.push(newAdminProfile);
 
+  let residentRecordId: string | null = null;
   if (firstFlatId) {
+    residentRecordId = genId('res');
     memoryStore.residents.push({
-      id: genId('res'),
+      id: residentRecordId,
       society_id: societyId,
       flat_id: firstFlatId,
       full_name: adminName,
@@ -406,16 +412,31 @@ router.post('/register-society', async (req, res) => {
     });
   }
 
-  // 5. Try inserting into MySQL in background
+  // 5. Insert complete society data into MySQL
   pool.getConnection().then(async (conn) => {
     try {
       await conn.beginTransaction();
       await conn.query('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)', [adminId, cleanEmail, passwordHash]);
       await conn.query('INSERT INTO societies (id, name, address, code, created_by) VALUES (?, ?, ?, ?, ?)', [societyId, societyName, fullAddress, societyCode, adminId]);
       await conn.query('INSERT INTO profiles (id, society_id, full_name, phone, role, avatar_color) VALUES (?, ?, ?, ?, ?, ?)', [adminId, societyId, `${adminName} (Admin)`, adminPhone, 'admin', 'teal']);
+
+      for (const f of generatedFlats) {
+        await conn.query(
+          'INSERT INTO flats (id, society_id, flat_number, block, floor, area, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [f.id, societyId, f.flat_number, f.block, f.floor, f.area, f.status]
+        );
+      }
+
+      if (firstFlatId && residentRecordId) {
+        await conn.query(
+          'INSERT INTO residents (id, society_id, flat_id, full_name, phone, email, type, status, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [residentRecordId, societyId, firstFlatId, adminName, adminPhone || null, cleanEmail, 'owner', 'active', 'teal']
+        );
+      }
       await conn.commit();
-    } catch {
+    } catch (dbErr) {
       await conn.rollback();
+      console.warn('MySQL bulk registration notice:', dbErr);
     } finally {
       conn.release();
     }
