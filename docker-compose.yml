@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    container_name: smartnest-app
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=smartnest_root_pass
+      - DB_NAME=smartnest_db
+      - JWT_SECRET=smartnest_super_secret_jwt_key_2026
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    container_name: smartnest-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: smartnest_root_pass
+      MYSQL_DATABASE: smartnest_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./server/schema.mysql.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-psmartnest_root_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:
