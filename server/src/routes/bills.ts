@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authMiddleware, type AuthRequest } from '../middleware/auth';
-import { memoryStore } from '../memoryStore';
+import { memoryStore, saveMemoryStore } from '../memoryStore';
 
 const router = Router();
 
@@ -46,8 +46,9 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Flat ID, Bill Period, and Amount are required' });
   }
 
+  const billId = req.body.id || genId('bill');
+
   try {
-    const billId = req.body.id || genId('bill');
     await pool.query(
       `INSERT INTO maintenance_bills (id, society_id, flat_id, resident_id, bill_period, amount, status, due_date, paid_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -74,8 +75,25 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     );
     res.status(201).json(rows[0]);
   } catch (err: any) {
-    console.error('Create bill error:', err);
-    res.status(500).json({ error: 'Failed to create bill' });
+    const flat = memoryStore.flats.find((f) => f.id === flat_id);
+    const resident = memoryStore.residents.find((r) => r.id === resident_id || r.flat_id === flat_id);
+    const newBill = {
+      id: billId,
+      society_id: societyId,
+      flat_id,
+      resident_id: resident ? resident.id : (resident_id || null),
+      bill_period,
+      amount: Number(amount),
+      status,
+      due_date: due_date || new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+      paid_at: status === 'paid' ? (paid_at || new Date().toISOString()) : null,
+      flat_number: flat ? flat.flat_number : '—',
+      resident_name: resident ? resident.full_name : 'Resident',
+      created_at: new Date().toISOString(),
+    };
+    memoryStore.bills.push(newBill);
+    saveMemoryStore();
+    res.status(201).json(newBill);
   }
 });
 
@@ -104,8 +122,14 @@ router.patch('/:id/pay', authMiddleware, async (req: AuthRequest, res) => {
     }
     res.json(rows[0]);
   } catch (err: any) {
-    console.error('Pay bill error:', err);
-    res.status(500).json({ error: 'Failed to mark bill as paid' });
+    const bill = memoryStore.bills.find((b) => b.id === id);
+    if (bill) {
+      bill.status = 'paid';
+      bill.paid_at = new Date().toISOString();
+      saveMemoryStore();
+      return res.json(bill);
+    }
+    res.status(404).json({ error: 'Bill not found' });
   }
 });
 
@@ -116,9 +140,11 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
     await pool.query('DELETE FROM maintenance_bills WHERE id = ?', [id]);
     res.json({ message: 'Bill deleted successfully', id });
   } catch (err: any) {
-    console.error('Delete bill error:', err);
-    res.status(500).json({ error: 'Failed to delete bill' });
+    memoryStore.bills = memoryStore.bills.filter((b) => b.id !== id);
+    saveMemoryStore();
+    res.json({ message: 'Bill deleted successfully', id });
   }
 });
 
 export default router;
+

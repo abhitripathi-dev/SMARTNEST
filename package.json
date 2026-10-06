@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "tsx server/src/server.ts",
-    "server:dev": "nodemon --watch server/src -e ts,sql --exec tsx server/src/server.ts",
+    "server": "tsx watch server/src/server.ts",
+    "server:dev": "tsx watch server/src/server.ts",
     "dev:all": "concurrently -k \"npm run server\" \"npm run dev\"",
     "start": "tsx server/src/server.ts",
     "build": "tsc -b && vite build",

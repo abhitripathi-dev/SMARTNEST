@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authMiddleware, type AuthRequest } from '../middleware/auth';
-import { memoryStore } from '../memoryStore';
+import { memoryStore, saveMemoryStore } from '../memoryStore';
 
 const router = Router();
 
@@ -45,6 +45,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Visitor name is required' });
   }
 
+  const visId = req.body.id || genId('vis');
+
   try {
     let resolvedFlatId = flat_id;
     if (!resolvedFlatId && flat_number) {
@@ -57,7 +59,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       }
     }
 
-    const visId = req.body.id || genId('vis');
     const entryTimestamp = entry_time
       ? new Date(entry_time).toISOString().slice(0, 19).replace('T', ' ')
       : new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -83,8 +84,23 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     );
     res.status(201).json(rows[0]);
   } catch (err: any) {
-    console.error('Create visitor error:', err);
-    res.status(500).json({ error: 'Failed to record visitor' });
+    const flat = memoryStore.flats.find((f) => f.id === flat_id || f.flat_number === flat_number);
+    const newVis = {
+      id: visId,
+      society_id: societyId,
+      visitor_name,
+      flat_id: flat?.id || flat_id || null,
+      phone: phone || null,
+      purpose: purpose || 'Guest Visit',
+      photo_url: photo_url || null,
+      entry_time: entry_time || new Date().toISOString(),
+      exit_time: null,
+      flat_number: flat ? flat.flat_number : (flat_number || '—'),
+      created_at: new Date().toISOString(),
+    };
+    memoryStore.visitors.push(newVis);
+    saveMemoryStore();
+    res.status(201).json(newVis);
   }
 });
 
@@ -104,8 +120,13 @@ router.patch('/:id/exit', authMiddleware, async (req: AuthRequest, res) => {
     }
     res.json(rows[0]);
   } catch (err: any) {
-    console.error('Visitor exit error:', err);
-    res.status(500).json({ error: 'Failed to record visitor exit' });
+    const vis = memoryStore.visitors.find((v) => v.id === id);
+    if (vis) {
+      vis.exit_time = new Date().toISOString();
+      saveMemoryStore();
+      return res.json(vis);
+    }
+    res.status(404).json({ error: 'Visitor record not found' });
   }
 });
 
@@ -116,9 +137,11 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
     await pool.query('DELETE FROM visitors WHERE id = ?', [id]);
     res.json({ message: 'Visitor record deleted successfully', id });
   } catch (err: any) {
-    console.error('Delete visitor error:', err);
-    res.status(500).json({ error: 'Failed to delete visitor' });
+    memoryStore.visitors = memoryStore.visitors.filter((v) => v.id !== id);
+    saveMemoryStore();
+    res.json({ message: 'Visitor record deleted successfully', id });
   }
 });
 
 export default router;
+

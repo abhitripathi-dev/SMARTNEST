@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authMiddleware, type AuthRequest } from '../middleware/auth';
-import { memoryStore } from '../memoryStore';
+import { memoryStore, saveMemoryStore } from '../memoryStore';
 
 const router = Router();
 
@@ -38,8 +38,9 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Title is required' });
   }
 
+  const cmpId = req.body.id || genId('cmp');
+
   try {
-    const cmpId = req.body.id || genId('cmp');
     await pool.query(
       `INSERT INTO complaints (id, society_id, resident_id, flat_id, title, description, priority, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -65,8 +66,25 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     );
     res.status(201).json(rows[0]);
   } catch (err: any) {
-    console.error('Create complaint error:', err);
-    res.status(500).json({ error: 'Failed to create complaint' });
+    const flat = memoryStore.flats.find((f) => f.id === flat_id);
+    const resident = memoryStore.residents.find((r) => r.id === resident_id);
+    const newCmp = {
+      id: cmpId,
+      society_id: societyId,
+      resident_id: resident_id || null,
+      flat_id: flat_id || null,
+      title,
+      description: description || null,
+      priority,
+      status,
+      created_at: new Date().toISOString(),
+      resolved_at: null,
+      flat_number: flat ? flat.flat_number : 'General',
+      resident_name: resident ? resident.full_name : 'Society Resident',
+    };
+    memoryStore.complaints.push(newCmp);
+    saveMemoryStore();
+    res.status(201).json(newCmp);
   }
 });
 
@@ -101,8 +119,14 @@ router.patch('/:id/status', authMiddleware, async (req: AuthRequest, res) => {
     }
     res.json(rows[0]);
   } catch (err: any) {
-    console.error('Update complaint status error:', err);
-    res.status(500).json({ error: 'Failed to update complaint status' });
+    const cmp = memoryStore.complaints.find((c) => c.id === id);
+    if (cmp) {
+      cmp.status = status;
+      cmp.resolved_at = status === 'resolved' ? new Date().toISOString() : null;
+      saveMemoryStore();
+      return res.json(cmp);
+    }
+    res.status(404).json({ error: 'Complaint not found' });
   }
 });
 
@@ -113,9 +137,11 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
     await pool.query('DELETE FROM complaints WHERE id = ?', [id]);
     res.json({ message: 'Complaint deleted successfully', id });
   } catch (err: any) {
-    console.error('Delete complaint error:', err);
-    res.status(500).json({ error: 'Failed to delete complaint' });
+    memoryStore.complaints = memoryStore.complaints.filter((c) => c.id !== id);
+    saveMemoryStore();
+    res.json({ message: 'Complaint deleted successfully', id });
   }
 });
 
 export default router;
+

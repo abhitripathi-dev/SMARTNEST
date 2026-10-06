@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authMiddleware, type AuthRequest } from '../middleware/auth';
-import { memoryStore } from '../memoryStore';
+import { memoryStore, saveMemoryStore } from '../memoryStore';
 
 const router = Router();
 
@@ -44,8 +44,9 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res) => {
     }
     res.json(rows[0]);
   } catch (err: any) {
-    console.error('Fetch single resident error:', err);
-    res.status(500).json({ error: 'Failed to fetch resident' });
+    const r = memoryStore.residents.find((x) => x.id === id);
+    if (r) return res.json(r);
+    res.status(404).json({ error: 'Resident not found' });
   }
 });
 
@@ -68,6 +69,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Full name is required' });
   }
 
+  const resId = req.body.id || genId('res');
+
   try {
     let resolvedFlatId = flat_id;
     if (!resolvedFlatId && flat_number) {
@@ -80,7 +83,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       }
     }
 
-    const resId = req.body.id || genId('res');
     await pool.query(
       `INSERT INTO residents (id, society_id, flat_id, full_name, phone, email, type, status, avatar_color, user_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -109,8 +111,28 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     );
     res.status(201).json(rows[0]);
   } catch (err: any) {
-    console.error('Create resident error:', err);
-    res.status(500).json({ error: 'Failed to create resident' });
+    const flat = memoryStore.flats.find((f) => f.id === flat_id || f.flat_number === flat_number);
+    const newRes = {
+      id: resId,
+      society_id: societyId,
+      flat_id: flat?.id || flat_id || null,
+      full_name,
+      phone: phone || null,
+      email: email || null,
+      type,
+      status,
+      avatar_color,
+      user_id: user_id || null,
+      flat_number: flat ? flat.flat_number : (flat_number || null),
+      created_at: new Date().toISOString(),
+    };
+    memoryStore.residents.push(newRes);
+    if (flat) {
+      flat.status = 'occupied';
+      flat.resident_name = full_name;
+    }
+    saveMemoryStore();
+    res.status(201).json(newRes);
   }
 });
 
@@ -150,8 +172,13 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     }
     res.json(rows[0]);
   } catch (err: any) {
-    console.error('Update resident error:', err);
-    res.status(500).json({ error: 'Failed to update resident' });
+    const idx = memoryStore.residents.findIndex((r) => r.id === id);
+    if (idx !== -1) {
+      memoryStore.residents[idx] = { ...memoryStore.residents[idx], ...req.body };
+      saveMemoryStore();
+      return res.json(memoryStore.residents[idx]);
+    }
+    res.status(404).json({ error: 'Resident not found' });
   }
 });
 
@@ -169,9 +196,11 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
       deletedResident,
     });
   } catch (err: any) {
-    console.error('Delete resident error:', err);
-    res.status(500).json({ error: 'Failed to delete resident' });
+    memoryStore.residents = memoryStore.residents.filter((r) => r.id !== id);
+    saveMemoryStore();
+    res.json({ message: 'Resident deleted successfully', id });
   }
 });
 
 export default router;
+

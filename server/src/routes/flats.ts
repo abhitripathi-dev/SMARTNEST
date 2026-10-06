@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authMiddleware, type AuthRequest } from '../middleware/auth';
-import { memoryStore } from '../memoryStore';
+import { memoryStore, saveMemoryStore } from '../memoryStore';
 
 const router = Router();
 
@@ -37,8 +37,9 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Flat number is required' });
   }
 
+  const flatId = req.body.id || genId('flat');
+
   try {
-    const flatId = req.body.id || genId('flat');
     await pool.query(
       `INSERT INTO flats (id, society_id, flat_number, block, floor, area, status)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -48,8 +49,20 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const [rows]: any = await pool.query('SELECT * FROM flats WHERE id = ?', [flatId]);
     res.status(201).json(rows[0]);
   } catch (err: any) {
-    console.error('Create flat error:', err);
-    res.status(500).json({ error: 'Failed to create flat' });
+    const newFlat = {
+      id: flatId,
+      society_id: societyId,
+      flat_number,
+      block: block || 'A Wing',
+      floor: floor || '1st Floor',
+      area: area || '1,250 sq ft',
+      status,
+      resident_name: null,
+      created_at: new Date().toISOString(),
+    };
+    memoryStore.flats.push(newFlat);
+    saveMemoryStore();
+    res.status(201).json(newFlat);
   }
 });
 
@@ -76,8 +89,13 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     }
     res.json(rows[0]);
   } catch (err: any) {
-    console.error('Update flat error:', err);
-    res.status(500).json({ error: 'Failed to update flat' });
+    const idx = memoryStore.flats.findIndex((f) => f.id === id);
+    if (idx !== -1) {
+      memoryStore.flats[idx] = { ...memoryStore.flats[idx], ...req.body };
+      saveMemoryStore();
+      return res.json(memoryStore.flats[idx]);
+    }
+    res.status(404).json({ error: 'Flat not found' });
   }
 });
 
@@ -88,9 +106,11 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
     await pool.query('DELETE FROM flats WHERE id = ?', [id]);
     res.json({ message: 'Flat deleted successfully', id });
   } catch (err: any) {
-    console.error('Delete flat error:', err);
-    res.status(500).json({ error: 'Failed to delete flat' });
+    memoryStore.flats = memoryStore.flats.filter((f) => f.id !== id);
+    saveMemoryStore();
+    res.json({ message: 'Flat deleted successfully', id });
   }
 });
 
 export default router;
+
