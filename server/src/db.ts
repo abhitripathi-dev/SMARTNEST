@@ -27,13 +27,14 @@ let sqliteDb: DatabaseSync | null = null;
 
 function createConnectionPool() {
   if (DB_URL) {
+    const isCloud = DB_SSL || DB_URL.includes('tidbcloud.com') || DB_URL.includes('ssl') || DB_URL.includes('aivencloud.com');
     return mysql.createPool({
       uri: DB_URL,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
-      connectTimeout: 5000,
-      ssl: DB_SSL ? { rejectUnauthorized: false } : undefined,
+      connectTimeout: 10000,
+      ssl: isCloud ? { rejectUnauthorized: false } : undefined,
     });
   }
 
