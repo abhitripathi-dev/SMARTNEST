@@ -469,6 +469,21 @@ export async function initializeDatabase(): Promise<boolean> {
         console.log('[MySQL] Initial schema and seed data applied successfully!');
       }
     }
+
+    // Ensure all critical columns exist on existing MySQL / TiDB tables
+    const autoAlterColumns = [
+      'ALTER TABLE users ADD COLUMN raw_password VARCHAR(255) NULL',
+      'ALTER TABLE users ADD COLUMN society_id VARCHAR(36) NULL',
+      'ALTER TABLE flats ADD COLUMN resident_name VARCHAR(255) NULL',
+      'ALTER TABLE residents ADD COLUMN flat_number VARCHAR(50) NULL',
+      'ALTER TABLE residents ADD COLUMN user_id VARCHAR(36) NULL',
+    ];
+    for (const alterSql of autoAlterColumns) {
+      try {
+        await conn.query(alterSql);
+      } catch {}
+    }
+
     conn.release();
     return true;
   } catch (mysqlErr: any) {

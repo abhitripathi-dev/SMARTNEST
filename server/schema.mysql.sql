@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(36) PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
+  raw_password VARCHAR(255),
+  society_id VARCHAR(36),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -55,6 +57,7 @@ CREATE TABLE IF NOT EXISTS flats (
   floor VARCHAR(50),
   area VARCHAR(50),
   status ENUM('occupied', 'vacant', 'under_maintenance') NOT NULL DEFAULT 'vacant',
+  resident_name VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -74,6 +77,7 @@ CREATE TABLE IF NOT EXISTS residents (
   status ENUM('active', 'pending') NOT NULL DEFAULT 'active',
   avatar_color VARCHAR(50) DEFAULT 'blue',
   user_id VARCHAR(36),
+  flat_number VARCHAR(50),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
   FOREIGN KEY (flat_id) REFERENCES flats(id) ON DELETE SET NULL,

@@ -17,8 +17,23 @@ import type {
 } from './types';
 import { getJwtToken } from './jwt';
 
-const rawApiUrl = (import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).trim().replace(/\/+$/, '') : '');
-const API_BASE = rawApiUrl ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`) : '/api';
+function getApiBase(): string {
+  const envUrl = import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).trim() : '';
+  const storedUrl = typeof window !== 'undefined' ? localStorage.getItem('smartnest_backend_url')?.trim() : '';
+  const rawApiUrl = (envUrl || storedUrl || '').replace(/\/+$/, '');
+  return rawApiUrl ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`) : '/api';
+}
+
+export function setCustomBackendUrl(url: string) {
+  if (typeof window !== 'undefined') {
+    const clean = url.trim().replace(/\/+$/, '');
+    if (clean) {
+      localStorage.setItem('smartnest_backend_url', clean);
+    } else {
+      localStorage.removeItem('smartnest_backend_url');
+    }
+  }
+}
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
@@ -32,14 +47,22 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const apiBase = getApiBase();
 
   try {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const response = await fetch(`${apiBase}${endpoint}`, {
       ...options,
       headers,
       signal: options.signal || controller.signal,
     });
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      throw new Error(
+        `Backend API returned HTML instead of JSON. Ensure your frontend has VITE_API_URL set to your Render backend URL (e.g. https://your-app.onrender.com).`
+      );
+    }
 
     if (!response.ok) {
       let errorMsg = `HTTP Error ${response.status}`;
