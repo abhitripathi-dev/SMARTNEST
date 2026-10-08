@@ -49,6 +49,14 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   const billId = req.body.id || genId('bill');
 
   try {
+    let resolvedResidentId = resident_id;
+    if (!resolvedResidentId && flat_id) {
+      const [residents]: any = await pool.query('SELECT id FROM residents WHERE flat_id = ? AND status = "active" LIMIT 1', [flat_id]);
+      if (residents && residents.length > 0) {
+        resolvedResidentId = residents[0].id;
+      }
+    }
+
     await pool.query(
       `INSERT INTO maintenance_bills (id, society_id, flat_id, resident_id, bill_period, amount, status, due_date, paid_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -56,7 +64,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         billId,
         societyId,
         flat_id,
-        resident_id || null,
+        resolvedResidentId || null,
         bill_period,
         amount,
         status,
@@ -73,7 +81,26 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
        WHERE b.id = ?`,
       [billId]
     );
-    res.status(201).json(rows[0]);
+    const saved = rows && rows.length > 0 ? rows[0] : {
+      id: billId,
+      society_id: societyId,
+      flat_id,
+      resident_id: resolvedResidentId || null,
+      bill_period,
+      amount: Number(amount),
+      status,
+      due_date: due_date || null,
+      paid_at: paid_at || null,
+      created_at: new Date().toISOString(),
+    };
+    const memIdx = memoryStore.bills.findIndex((b) => b.id === billId);
+    if (memIdx >= 0) {
+      memoryStore.bills[memIdx] = saved;
+    } else {
+      memoryStore.bills.unshift(saved);
+    }
+    saveMemoryStore();
+    res.status(201).json(saved);
   } catch (err: any) {
     const flat = memoryStore.flats.find((f) => f.id === flat_id);
     const resident = memoryStore.residents.find((r) => r.id === resident_id || r.flat_id === flat_id);
@@ -91,7 +118,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       resident_name: resident ? resident.full_name : 'Resident',
       created_at: new Date().toISOString(),
     };
-    memoryStore.bills.push(newBill);
+    memoryStore.bills.unshift(newBill);
     saveMemoryStore();
     res.status(201).json(newBill);
   }

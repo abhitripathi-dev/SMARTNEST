@@ -83,7 +83,7 @@ import {
   useVisitorChart,
   useVisitors,
 } from './lib/hooks';
-import { dataStore } from './lib/dataStore';
+import { dataStore, getActiveSocietyId } from './lib/dataStore';
 import { subscribeToRealtimeChanges, isSupabaseConfigured } from './lib/supabase';
 import { SmartNestLandingPage } from './components/SmartNestLandingPage';
 import { SocietyLogo } from './components/SocietyLogo';
@@ -2723,11 +2723,14 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     setError(null);
 
     let assignedFlatId = flatId;
+    const activeSocId = getActiveSocietyId();
+    const cleanCustom = customFlat.trim().toUpperCase();
 
-    if (!assignedFlatId && customFlat.trim()) {
+    if (!assignedFlatId && cleanCustom) {
       const createdFlat = await dataStore.flats.create({
-        flat_number: customFlat.trim().toUpperCase(),
-        block: `${customFlat.trim().split('-')[0] || 'A'} Wing`,
+        society_id: activeSocId,
+        flat_number: cleanCustom,
+        block: `${cleanCustom.split('-')[0] || 'A'} Wing`,
         floor: '1st Floor',
         area: '1,350 sq ft',
         status: 'occupied',
@@ -2738,12 +2741,16 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     }
 
     const fullPhone = `+91 ${phoneDigits}`;
+    const selectedFlatObj = flats.find((f) => f.id === flatId);
+    const resolvedFlatNumber = cleanCustom || selectedFlatObj?.flat_number || null;
 
     const res = await dataStore.residents.create({
+      society_id: activeSocId,
       full_name: name.trim(),
       phone: fullPhone,
       email: email.trim() || null,
       flat_id: assignedFlatId || null,
+      flat_number: resolvedFlatNumber,
       type,
       status,
     });

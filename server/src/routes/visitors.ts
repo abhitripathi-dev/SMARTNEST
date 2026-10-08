@@ -82,7 +82,27 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       `SELECT v.*, f.flat_number FROM visitors v LEFT JOIN flats f ON f.id = v.flat_id WHERE v.id = ?`,
       [visId]
     );
-    res.status(201).json(rows[0]);
+    const saved = rows && rows.length > 0 ? rows[0] : {
+      id: visId,
+      society_id: societyId,
+      visitor_name,
+      flat_id: resolvedFlatId || null,
+      phone: phone || null,
+      purpose: purpose || 'Guest Visit',
+      photo_url: photo_url || null,
+      entry_time: entry_time || new Date().toISOString(),
+      exit_time: null,
+      flat_number: flat_number || '—',
+      created_at: new Date().toISOString(),
+    };
+    const memIdx = memoryStore.visitors.findIndex((v) => v.id === visId);
+    if (memIdx >= 0) {
+      memoryStore.visitors[memIdx] = saved;
+    } else {
+      memoryStore.visitors.unshift(saved);
+    }
+    saveMemoryStore();
+    res.status(201).json(saved);
   } catch (err: any) {
     const flat = memoryStore.flats.find((f) => f.id === flat_id || f.flat_number === flat_number);
     const newVis = {
@@ -98,7 +118,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       flat_number: flat ? flat.flat_number : (flat_number || '—'),
       created_at: new Date().toISOString(),
     };
-    memoryStore.visitors.push(newVis);
+    memoryStore.visitors.unshift(newVis);
     saveMemoryStore();
     res.status(201).json(newVis);
   }

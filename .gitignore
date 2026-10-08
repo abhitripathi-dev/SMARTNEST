@@ -13,6 +13,9 @@ dist-ssr
 *.local
 *.tsbuildinfo
 .env
+data/
+*.sqlite*
+*.sqlite3*
 
 # Editor directories and files
 .vscode/*

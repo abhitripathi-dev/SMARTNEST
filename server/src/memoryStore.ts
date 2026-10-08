@@ -134,14 +134,48 @@ function loadStore() {
 
 export const memoryStore = loadStore();
 
-export function saveMemoryStore() {
+let isWriting = false;
+let isSaveQueued = false;
+
+export async function saveMemoryStore(): Promise<void> {
+  if (isWriting) {
+    isSaveQueued = true;
+    return;
+  }
+  isWriting = true;
+
   try {
-    fs.writeFileSync(STORE_FILE, JSON.stringify(memoryStore, null, 2), 'utf-8');
+    const data = JSON.stringify(memoryStore, null, 2);
+    const tmpFile = `${STORE_FILE}.tmp.${Date.now()}`;
+    await fs.promises.writeFile(tmpFile, data, 'utf-8');
+
+    let retries = 5;
+    while (retries > 0) {
+      try {
+        await fs.promises.rename(tmpFile, STORE_FILE);
+        break;
+      } catch (renameErr) {
+        retries--;
+        if (retries === 0) {
+          await fs.promises.writeFile(STORE_FILE, data, 'utf-8');
+          try { await fs.promises.unlink(tmpFile); } catch {}
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+    }
   } catch (err) {
     console.error('[Store] Failed to write store.json:', err);
+  } finally {
+    isWriting = false;
+    if (isSaveQueued) {
+      isSaveQueued = false;
+      saveMemoryStore();
+    }
   }
 }
 
-// Auto-save every 2 seconds
-setInterval(saveMemoryStore, 2000);
+// Auto-save every 5 seconds
+setInterval(saveMemoryStore, 5000);
+
 

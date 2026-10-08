@@ -34,11 +34,22 @@ export type DemoLead = {
 export function getActiveSocietyId(): string {
   try {
     const activeId = localStorage.getItem('society_active_id');
-    if (activeId) return activeId;
+    if (activeId && activeId !== 'undefined' && activeId !== 'null') return activeId;
     const customRaw = localStorage.getItem('society_custom_registered');
     if (customRaw) {
       const custom = JSON.parse(customRaw);
       if (custom.societyId) return custom.societyId;
+      if (custom.society?.id) return custom.society.id;
+    }
+    const token = localStorage.getItem('society_auth_token') || localStorage.getItem('jwt_token');
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          if (payload?.society_id) return payload.society_id;
+        }
+      } catch { }
     }
   } catch { }
   return DEMO_SOCIETY_ID;
@@ -141,6 +152,22 @@ export function setLocal<T>(key: string, value: T, notify = true): void {
 export function notifyDataChange(entity: string): void {
   try {
     window.dispatchEvent(new CustomEvent('society-data-change', { detail: { entity, timestamp: Date.now() } }));
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('smartnest_cross_tab_sync');
+      bc.postMessage({ entity, timestamp: Date.now() });
+      bc.close();
+    }
+  } catch { }
+}
+
+if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+  try {
+    const receiver = new BroadcastChannel('smartnest_cross_tab_sync');
+    receiver.onmessage = (e) => {
+      if (e.data?.entity) {
+        window.dispatchEvent(new CustomEvent('society-data-change', { detail: e.data }));
+      }
+    };
   } catch { }
 }
 
@@ -428,14 +455,18 @@ export const dataStore = {
       phone?: string | null;
       email?: string | null;
       flat_id?: string | null;
+      flat_number?: string | null;
       type: 'owner' | 'tenant';
       status?: 'active' | 'pending';
       society_id?: string;
     }) => {
       const activeSocId = payload.society_id || getActiveSocietyId();
+      let flatNumber = payload.flat_number || null;
       const allFlats = getLocal<Flat[]>('flats', INITIAL_FLATS);
-      const flat = allFlats.find((f) => f.id === payload.flat_id);
-      const flatNumber = flat ? flat.flat_number : null;
+      if (!flatNumber && payload.flat_id) {
+        const flat = allFlats.find((f) => f.id === payload.flat_id);
+        if (flat) flatNumber = flat.flat_number;
+      }
 
       const newResident: Resident & { flat_number: string | null } = {
         id: generateId('res'),
@@ -453,25 +484,33 @@ export const dataStore = {
       };
 
       try {
-        await api.residents.create({
+        const remote = await api.residents.create({
           id: newResident.id,
           society_id: activeSocId,
           full_name: payload.full_name,
           phone: payload.phone || null,
           email: payload.email || null,
           flat_id: payload.flat_id || null,
+          flat_number: flatNumber,
           type: payload.type,
           status: payload.status || 'active',
           avatar_color: newResident.avatar_color,
         });
-      } catch { }
+        if (remote) {
+          if (remote.id) newResident.id = remote.id;
+          if (remote.flat_id) newResident.flat_id = remote.flat_id;
+          if (remote.flat_number) newResident.flat_number = remote.flat_number;
+        }
+      } catch (err: any) {
+        console.warn('Backend resident sync note:', err?.message || err);
+      }
 
       const list = getLocal<(Resident & { flat_number: string | null })[]>('residents', INITIAL_RESIDENTS);
-      const updated = [newResident, ...list];
+      const updated = [newResident, ...list.filter((r) => r.id !== newResident.id)];
       setLocal('residents', updated);
 
-      if (payload.flat_id) {
-        const updatedFlats = allFlats.map((f) => (f.id === payload.flat_id ? { ...f, status: 'occupied' as const } : f));
+      if (newResident.flat_id) {
+        const updatedFlats = allFlats.map((f) => (f.id === newResident.flat_id ? { ...f, status: 'occupied' as const, resident_name: newResident.full_name } : f));
         setLocal('flats', updatedFlats);
       }
 
@@ -570,7 +609,7 @@ export const dataStore = {
       };
 
       try {
-        await api.flats.create({
+        const remote = await api.flats.create({
           id: newFlat.id,
           society_id: activeSocId,
           flat_number: payload.flat_number,
@@ -579,10 +618,14 @@ export const dataStore = {
           area: payload.area,
           status: payload.status,
         });
-      } catch { }
+        if (remote?.id) newFlat.id = remote.id;
+      } catch (err: any) {
+        console.warn('Backend flat sync note:', err?.message || err);
+      }
 
       const list = getLocal<Flat[]>('flats', INITIAL_FLATS);
-      setLocal('flats', [newFlat, ...list]);
+      const updated = [newFlat, ...list.filter((f) => f.id !== newFlat.id)];
+      setLocal('flats', updated);
       return { data: newFlat, error: null };
     },
 

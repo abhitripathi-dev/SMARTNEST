@@ -134,6 +134,17 @@
   ],
   "flats": [
     {
+      "id": "flat-muzms6es-9vv0n",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "flat_number": "TEST-102",
+      "block": "Test Wing",
+      "floor": "1st Floor",
+      "area": null,
+      "status": "vacant",
+      "resident_name": null,
+      "created_at": "2026-10-08 14:27:42"
+    },
+    {
       "id": "flat-101",
       "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
       "flat_number": "A-101",
@@ -550,9 +561,34 @@
       "status": "occupied",
       "resident_name": "shubham",
       "created_at": "2026-10-06T16:55:30.508Z"
+    },
+    {
+      "id": "flat-muzms6ep-64cn8",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "flat_number": "TEST-101",
+      "block": "TEST Wing",
+      "floor": "1st Floor",
+      "area": "1,250 sq ft",
+      "status": "occupied",
+      "resident_name": "Concurrent User 1",
+      "created_at": "2026-10-08T14:27:42.577Z"
     }
   ],
   "residents": [
+    {
+      "id": "res-muzms6ep-a75bf",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "flat_id": "flat-muzms6ep-64cn8",
+      "full_name": "Concurrent User 1",
+      "phone": "+91 9988776655",
+      "email": null,
+      "type": "owner",
+      "status": "active",
+      "avatar_color": "blue",
+      "user_id": null,
+      "created_at": "2026-10-08 14:27:42",
+      "flat_number": "TEST-101"
+    },
     {
       "id": "res-1",
       "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
@@ -716,6 +752,20 @@
   ],
   "bills": [
     {
+      "id": "bill-muzms6er-4iztw",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "flat_id": "flat-101",
+      "resident_id": "res-1",
+      "bill_period": "Oct 2026",
+      "amount": 5500,
+      "status": "pending",
+      "due_date": "2026-10-23",
+      "paid_at": null,
+      "flat_number": "A-101",
+      "resident_name": "Aarav Sharma",
+      "created_at": "2026-10-08T14:27:42.579Z"
+    },
+    {
       "id": "bill-1",
       "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
       "flat_id": "flat-101",
@@ -802,6 +852,20 @@
   ],
   "complaints": [
     {
+      "id": "cmp-muzms6es-6simg",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "resident_id": null,
+      "flat_id": null,
+      "title": "Concurrent Complaint Test",
+      "description": null,
+      "priority": "high",
+      "status": "open",
+      "created_at": "2026-10-08 14:27:42",
+      "resolved_at": null,
+      "resident_name": null,
+      "flat_number": null
+    },
+    {
       "id": "cmp-1",
       "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
       "resident_id": "res-2",
@@ -859,6 +923,19 @@
     }
   ],
   "visitors": [
+    {
+      "id": "vis-muzms6et-glsqm",
+      "society_id": "e7b1a234-5678-4321-8765-abcdef123456",
+      "visitor_name": "Concurrent Visitor",
+      "flat_id": "flat-muzms6ep-64cn8",
+      "phone": null,
+      "purpose": "Delivery",
+      "photo_url": null,
+      "entry_time": "2026-10-08 14:27:42",
+      "exit_time": null,
+      "created_at": "2026-10-08 14:27:42",
+      "flat_number": "TEST-101"
+    },
     {
       "id": "vis-1",
       "society_id": "e7b1a234-5678-4321-8765-abcdef123456",

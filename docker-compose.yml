@@ -13,6 +13,8 @@ services:
       - DB_PASSWORD=smartnest_root_pass
       - DB_NAME=smartnest_db
       - JWT_SECRET=smartnest_super_secret_jwt_key_2026
+    volumes:
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy

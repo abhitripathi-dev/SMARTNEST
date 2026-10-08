@@ -64,7 +64,28 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
        WHERE c.id = ?`,
       [cmpId]
     );
-    res.status(201).json(rows[0]);
+    const saved = rows && rows.length > 0 ? rows[0] : {
+      id: cmpId,
+      society_id: societyId,
+      resident_id: resident_id || null,
+      flat_id: flat_id || null,
+      title,
+      description: description || null,
+      priority,
+      status,
+      created_at: new Date().toISOString(),
+      resolved_at: null,
+      flat_number: 'General',
+      resident_name: 'Society Resident',
+    };
+    const memIdx = memoryStore.complaints.findIndex((c) => c.id === cmpId);
+    if (memIdx >= 0) {
+      memoryStore.complaints[memIdx] = saved;
+    } else {
+      memoryStore.complaints.unshift(saved);
+    }
+    saveMemoryStore();
+    res.status(201).json(saved);
   } catch (err: any) {
     const flat = memoryStore.flats.find((f) => f.id === flat_id);
     const resident = memoryStore.residents.find((r) => r.id === resident_id);
@@ -82,7 +103,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       flat_number: flat ? flat.flat_number : 'General',
       resident_name: resident ? resident.full_name : 'Society Resident',
     };
-    memoryStore.complaints.push(newCmp);
+    memoryStore.complaints.unshift(newCmp);
     saveMemoryStore();
     res.status(201).json(newCmp);
   }

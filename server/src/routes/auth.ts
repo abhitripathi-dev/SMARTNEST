@@ -413,15 +413,32 @@ router.post('/register-society', async (req, res) => {
 
   saveMemoryStore();
 
-  // 5. Try inserting into MySQL in background
+  // 5. Insert into Database (MySQL / SQLite)
   pool.getConnection().then(async (conn) => {
     try {
       await conn.beginTransaction();
-      await conn.query('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)', [adminId, cleanEmail, passwordHash]);
+      await conn.query('INSERT INTO users (id, email, password_hash, raw_password, society_id) VALUES (?, ?, ?, ?, ?)', [adminId, cleanEmail, passwordHash, adminPassword, societyId]);
       await conn.query('INSERT INTO societies (id, name, address, code, created_by) VALUES (?, ?, ?, ?, ?)', [societyId, societyName, fullAddress, societyCode, adminId]);
       await conn.query('INSERT INTO profiles (id, society_id, full_name, phone, role, avatar_color) VALUES (?, ?, ?, ?, ?, ?)', [adminId, societyId, `${adminName} (Admin)`, adminPhone, 'admin', 'teal']);
+
+      for (const f of generatedFlats) {
+        await conn.query(
+          'INSERT INTO flats (id, society_id, flat_number, block, floor, area, status, resident_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [f.id, societyId, f.flat_number, f.block, f.floor, f.area, f.status, f.resident_name || null]
+        );
+      }
+
+      if (firstFlatId) {
+        const resId = genId('res');
+        await conn.query(
+          'INSERT INTO residents (id, society_id, flat_id, full_name, phone, email, type, status, avatar_color, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [resId, societyId, firstFlatId, adminName, adminPhone, cleanEmail, 'owner', 'active', 'teal', adminId]
+        );
+      }
+
       await conn.commit();
-    } catch {
+    } catch (dbErr: any) {
+      console.warn('[Register DB Insert Error]', dbErr?.message || dbErr);
       await conn.rollback();
     } finally {
       conn.release();

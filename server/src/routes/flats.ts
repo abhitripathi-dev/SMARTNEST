@@ -47,7 +47,25 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     );
 
     const [rows]: any = await pool.query('SELECT * FROM flats WHERE id = ?', [flatId]);
-    res.status(201).json(rows[0]);
+    const saved = rows && rows.length > 0 ? rows[0] : {
+      id: flatId,
+      society_id: societyId,
+      flat_number,
+      block: block || 'A Wing',
+      floor: floor || '1st Floor',
+      area: area || '1,250 sq ft',
+      status,
+      resident_name: null,
+      created_at: new Date().toISOString(),
+    };
+    const memIdx = memoryStore.flats.findIndex((f) => f.id === flatId);
+    if (memIdx >= 0) {
+      memoryStore.flats[memIdx] = saved;
+    } else {
+      memoryStore.flats.unshift(saved);
+    }
+    saveMemoryStore();
+    res.status(201).json(saved);
   } catch (err: any) {
     const newFlat = {
       id: flatId,
@@ -60,7 +78,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       resident_name: null,
       created_at: new Date().toISOString(),
     };
-    memoryStore.flats.push(newFlat);
+    memoryStore.flats.unshift(newFlat);
     saveMemoryStore();
     res.status(201).json(newFlat);
   }

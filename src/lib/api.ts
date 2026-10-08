@@ -17,7 +17,8 @@ import type {
 } from './types';
 import { getJwtToken } from './jwt';
 
-const API_BASE = (import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '') : '') + '/api';
+const rawApiUrl = (import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).trim().replace(/\/+$/, '') : '');
+const API_BASE = rawApiUrl ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`) : '/api';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
@@ -109,7 +110,7 @@ export const api = {
   residents: {
     list: (societyId?: string) => request<(Resident & { flat_number: string | null })[]>(`/residents${societyId ? `?society_id=${societyId}` : ''}`),
     get: (id: string) => request<Resident & { flat_number: string | null }>(`/residents/${id}`),
-    create: (resident: Partial<Resident>) => request<Resident & { flat_number: string | null }>('/residents', { method: 'POST', body: JSON.stringify(resident) }),
+    create: (resident: Partial<Resident & { flat_number?: string | null }>) => request<Resident & { flat_number: string | null }>('/residents', { method: 'POST', body: JSON.stringify(resident) }),
     update: (id: string, resident: Partial<Resident>) => request<Resident & { flat_number: string | null }>(`/residents/${id}`, { method: 'PUT', body: JSON.stringify(resident) }),
     delete: (id: string) => request<{ message: string; id: string; deletedResident: any }>(`/residents/${id}`, { method: 'DELETE' }),
   },
