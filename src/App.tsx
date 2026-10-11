@@ -218,7 +218,7 @@ export function App() {
 }
 
 function AppShell() {
-  const { session, loading, profile, signOut } = useAuth();
+  const { session, loading, profile, signOut, switchDemoRole } = useAuth();
   const [view, setView] = useState<View>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pageLoading, setPageLoading] = useState(false);
@@ -227,10 +227,25 @@ function AppShell() {
   });
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(() => {
-    // Default to Landing Page so the user immediately sees the SmartNest landing page
-    const saved = localStorage.getItem('society_view_mode');
+    // When visiting the website, always show the Landing Page first unless an authenticated user is actively logged in!
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('society_auth_token') || localStorage.getItem('jwt_token') || localStorage.getItem('society_custom_registered')) : null;
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('society_view_mode') : null;
+    if (!token) return true;
     return saved !== 'portal';
   });
+
+  useEffect(() => {
+    const handleAuth = () => {
+      const mode = localStorage.getItem('society_view_mode');
+      if (mode === 'landing') {
+        setShowLanding(true);
+      } else if (mode === 'portal') {
+        setShowLanding(false);
+      }
+    };
+    window.addEventListener('society-auth-change', handleAuth);
+    return () => window.removeEventListener('society-auth-change', handleAuth);
+  }, []);
 
   useScrollReveal();
 
@@ -250,7 +265,10 @@ function AppShell() {
     });
   }, []);
 
-  const handleEnterPortal = () => {
+  const handleEnterPortal = (role?: any) => {
+    if (role && typeof switchDemoRole === 'function') {
+      switchDemoRole(role);
+    }
     window.dispatchEvent(new Event('society-auth-change'));
     window.dispatchEvent(new Event('society-data-change'));
     localStorage.setItem('society_view_mode', 'portal');
@@ -2328,14 +2346,14 @@ function ActivityCard({ onNavigate, stats, isResident }: { onNavigate: (view: Vi
 // MANAGEMENT VIEW CONTAINER
 // ============================================================
 function ManagementView({ view, onNavigate }: { view: View; onNavigate: (view: View) => void }) {
+  const permissions = usePermissions();
+
   if (view === 'overview') {
     return <Dashboard onNavigate={onNavigate} />;
   }
   if (view === 'settings') {
     return <SettingsView />;
   }
-
-  const permissions = usePermissions();
 
   const adminConfig: Record<Exclude<View, 'overview' | 'settings' | 'api'>, { title: string; description: string; icon: IconType; action: string }> = {
     residents: { title: 'Residents', description: 'Manage your community directory and resident details.', icon: Users, action: 'Add resident' },
@@ -2727,16 +2745,22 @@ function AddResidentModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     const cleanCustom = customFlat.trim().toUpperCase();
 
     if (!assignedFlatId && cleanCustom) {
-      const createdFlat = await dataStore.flats.create({
-        society_id: activeSocId,
-        flat_number: cleanCustom,
-        block: `${cleanCustom.split('-')[0] || 'A'} Wing`,
-        floor: '1st Floor',
-        area: '1,350 sq ft',
-        status: 'occupied',
-      });
-      if (createdFlat.data) {
-        assignedFlatId = createdFlat.data.id;
+      const existingMatch = flats.find((f) => f.flat_number.trim().toUpperCase() === cleanCustom);
+      if (existingMatch) {
+        assignedFlatId = existingMatch.id;
+      } else {
+        const wingPart = cleanCustom.includes('-') ? cleanCustom.split('-')[0].trim() : 'A';
+        const createdFlat = await dataStore.flats.create({
+          society_id: activeSocId,
+          flat_number: cleanCustom,
+          block: `${wingPart} Wing`,
+          floor: '1st Floor',
+          area: '1,250 sq ft',
+          status: 'occupied',
+        });
+        if (createdFlat.data) {
+          assignedFlatId = createdFlat.data.id;
+        }
       }
     }
 
@@ -3156,7 +3180,7 @@ function FlatsView() {
 }
 
 function AddFlatModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const { profile } = useAuth();
+  const { profile, society } = useAuth();
   const { success } = useToast();
   const [flatNumber, setFlatNumber] = useState('');
   const [block, setBlock] = useState('');
@@ -3168,21 +3192,30 @@ function AddFlatModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanNum = flatNumber.trim();
+    if (!cleanNum) {
+      setError('Please enter a valid flat number.');
+      return;
+    }
+
     setBusy(true);
     setError(null);
 
+    const activeSocId = profile?.society_id || society?.id || getActiveSocietyId();
+
     const res = await dataStore.flats.create({
-      flat_number: flatNumber,
-      block: block || null,
-      floor: floor || null,
-      area: area || null,
+      flat_number: cleanNum,
+      block: block.trim() || null,
+      floor: floor.trim() || null,
+      area: area.trim() || null,
       status,
+      society_id: activeSocId,
     });
 
     if (res.error) {
       setError(res.error);
     } else {
-      success('Flat created', `Flat ${flatNumber} added to inventory.`);
+      success('Flat created', `Flat ${cleanNum} added to inventory.`);
       onSaved();
       onClose();
     }

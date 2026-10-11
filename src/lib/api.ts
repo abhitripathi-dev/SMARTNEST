@@ -46,8 +46,13 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const activeSocId = typeof window !== 'undefined' ? localStorage.getItem('society_active_id') : null;
+  if (activeSocId) {
+    headers['x-society-id'] = activeSocId;
+  }
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   const apiBase = getApiBase();
 
   try {

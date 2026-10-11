@@ -30,7 +30,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 
 // POST /api/flats
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
-  const societyId = req.body.society_id || req.user?.society_id || 'e7b1a234-5678-4321-8765-abcdef123456';
+  const societyId = req.body.society_id || (req.headers['x-society-id'] as string) || req.user?.society_id || 'e7b1a234-5678-4321-8765-abcdef123456';
   const { flat_number, block, floor, area, status = 'vacant' } = req.body;
 
   if (!flat_number) {
@@ -42,7 +42,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     await pool.query(
       `INSERT INTO flats (id, society_id, flat_number, block, floor, area, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE flat_number = VALUES(flat_number), block = VALUES(block), floor = VALUES(floor), area = VALUES(area), status = VALUES(status)`,
       [flatId, societyId, flat_number, block || null, floor || null, area || null, status]
     );
 

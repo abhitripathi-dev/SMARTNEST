@@ -13,19 +13,19 @@ npm run dev
 
 ---
 
-## 2. High-Concurrency Database Architecture
+## 2. Dedicated MySQL Relational Database Architecture
 
-The system features a **Dual-Engine High-Concurrency Database Architecture**:
-
-1. **Embedded SQLite Relational Engine (Default — Zero Config):**
-   - Built directly on Node.js native engine with **WAL mode (Write-Ahead Logging)** enabled (`PRAGMA journal_mode = WAL`).
-   - Allows **unlimited simultaneous readers and parallel writers** without blocking.
-   - Configured with `PRAGMA busy_timeout = 10000` (10-second queue timeout) to guarantee zero lock collisions or data loss when multiple users save data at the exact same millisecond.
-   - Requires **no external MySQL server or Docker to be installed** — works out-of-the-box on Windows, Linux, Mac, Docker, Render, and Railway.
-   - Persists all relational tables automatically under `data/smartnest.sqlite`.
-
-2. **Enterprise MySQL / MariaDB (Optional):**
-   - If MySQL credentials are provided in `.env` (or via `DATABASE_URL` / `MYSQL_URL`), the server automatically connects to MySQL and applies schema migrations.
+The system runs exclusively on a high-performance **MySQL Relational Database**:
+- Connected to MySQL 8.0 on host/container port 3306.
+- Connection pooling with automatic reconnection, keepalive, and schema migrations.
+- Configured via environment variables in `.env`:
+  ```env
+  DB_HOST=localhost
+  DB_PORT=3306
+  DB_USER=root
+  DB_PASSWORD=smartnest_root_pass
+  DB_NAME=smartnest_db
+  ```
 
 3. **Atomic Multi-Entity Linking:**
    - When entering a resident with a flat unit at the same time, the server atomically creates and links both entities in a single step, preventing orphaned records.

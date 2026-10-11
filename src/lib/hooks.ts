@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './auth';
-import { dataStore, getLocal } from './dataStore';
+import { dataStore } from './dataStore';
 import type {
   CollectionChartPoint,
   Complaint,
   ComplaintCounts,
   DashboardStats,
   Facility,
-  FacilityBooking,
   Flat,
   MaintenanceBill,
   Notification,
@@ -49,7 +48,7 @@ export function useCurrentResident() {
     }
     setCurrentResident(found || null);
     setLoading(false);
-  }, [profile]);
+  }, [profile, session?.user?.email]);
 
   useEffect(() => {
     refresh();
@@ -78,11 +77,13 @@ export function useDashboardStats() {
   const refresh = useCallback(async () => {
     setLoading(true);
 
-    const flats = await dataStore.flats.list();
-    const residents = await dataStore.residents.list();
-    const bills = await dataStore.bills.list();
-    const complaints = await dataStore.complaints.list();
-    const visitors = await dataStore.visitors.list();
+    const [flats, residents, bills, complaints, visitors] = await Promise.all([
+      dataStore.flats.list(),
+      dataStore.residents.list(),
+      dataStore.bills.list(),
+      dataStore.complaints.list(),
+      dataStore.visitors.list(),
+    ]);
 
     const totalFlats = flats.length;
     const occupiedFlats = flats.filter((f) => f.status === 'occupied').length;

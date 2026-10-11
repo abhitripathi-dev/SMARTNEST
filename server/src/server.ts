@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeDatabase, dbType } from './db';
+import { initializeDatabase } from './db';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,7 +40,7 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    database: dbType === 'mysql' ? 'MySQL' : 'SQLite (Embedded WAL)',
+    database: 'MySQL',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
@@ -89,6 +89,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
 
 export default app;

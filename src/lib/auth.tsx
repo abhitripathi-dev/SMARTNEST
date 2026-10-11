@@ -119,12 +119,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const custom = JSON.parse(customRaw);
         if (custom.profile) {
-          return { user: { id: custom.profile.id, email: custom.email }, access_token: 'custom-auth-token' };
+          const token = localStorage.getItem('society_auth_token') || localStorage.getItem('jwt_token') || 'custom-auth-token';
+          return { user: { id: custom.profile.id, email: custom.email }, access_token: token };
         }
       } catch { }
     }
-    const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
-    if (DEMO_PROFILES[storedDemo]) {
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('society_auth_token') || localStorage.getItem('jwt_token')) : null;
+    if (token) {
+      const decoded = verifyAndDecodeToken(token);
+      if (decoded?.payload?.sub) {
+        return { user: { id: decoded.payload.sub, email: decoded.payload.email }, access_token: token };
+      }
+    }
+    const storedDemo = typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null;
+    if (storedDemo && DEMO_PROFILES[storedDemo]) {
       return { user: { id: DEMO_PROFILES[storedDemo].profile.id, email: `${storedDemo}@smartnest.community` }, access_token: 'demo-token' };
     }
     return null;
@@ -138,8 +146,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (custom.profile) return custom.profile;
       } catch { }
     }
-    const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
-    return DEMO_PROFILES[storedDemo]?.profile || DEMO_PROFILES.admin.profile;
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('society_auth_token') || localStorage.getItem('jwt_token')) : null;
+    if (token) {
+      const decoded = verifyAndDecodeToken(token);
+      if (decoded?.payload?.sub) {
+        return {
+          id: decoded.payload.sub,
+          society_id: decoded.payload.society_id,
+          full_name: decoded.payload.name,
+          role: (decoded.payload.role as Role) || 'admin',
+          avatar_color: 'teal',
+          created_at: new Date().toISOString(),
+        };
+      }
+    }
+    const storedDemo = typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null;
+    if (storedDemo && DEMO_PROFILES[storedDemo]) {
+      return DEMO_PROFILES[storedDemo].profile;
+    }
+    return null;
   });
 
   const [society, setSociety] = useState<Society | null>(() => {
@@ -150,8 +175,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (custom.society) return custom.society;
       } catch { }
     }
-    const storedDemo = (typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null) || 'admin';
-    return DEMO_PROFILES[storedDemo]?.society || DEMO_PROFILES.admin.society;
+    const storedDemo = typeof window !== 'undefined' ? (localStorage.getItem('society_demo_role') as Role | null) : null;
+    if (storedDemo && DEMO_PROFILES[storedDemo]) {
+      return DEMO_PROFILES[storedDemo].society;
+    }
+    return null;
   });
 
   const [jwtToken, setJwtToken] = useState<string | null>(() => getJwtToken());
@@ -208,17 +236,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch { }
 
-      // 3. Demo fallback
-      const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
+      // 3. Demo fallback only if explicitly set
+      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
       if (storedDemo && DEMO_PROFILES[storedDemo]) {
         setProfile(DEMO_PROFILES[storedDemo].profile);
         setSociety(DEMO_PROFILES[storedDemo].society);
-      } else {
-        setProfile(DEMO_PROFILES.admin.profile);
-        setSociety(DEMO_PROFILES.admin.society);
       }
     } catch {
-      const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
+      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
       if (storedDemo && DEMO_PROFILES[storedDemo]) {
         setProfile(DEMO_PROFILES[storedDemo].profile);
         setSociety(DEMO_PROFILES[storedDemo].society);
@@ -264,8 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch { }
       }
 
-      const storedDemo = (localStorage.getItem('society_demo_role') as Role | null) || 'admin';
-      if (DEMO_PROFILES[storedDemo]) {
+      const storedDemo = localStorage.getItem('society_demo_role') as Role | null;
+      if (storedDemo && DEMO_PROFILES[storedDemo]) {
         setProfile(DEMO_PROFILES[storedDemo].profile);
         setSociety(DEMO_PROFILES[storedDemo].society);
         setSession({
@@ -360,28 +385,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString(),
       };
 
-      // Generate Starter Flats across all configured wings (up to 250 flats/wing)
+      // Generate Starter Flats across all configured wings
       const generatedFlats: Flat[] = [];
       const cleanWings = params.wings.length > 0 ? params.wings : ['A Wing', 'B Wing'];
-      const flatsCount = Math.min(Math.max(Number(params.flatsPerWing) || 8, 1), 250);
+      const flatsCount = Math.min(Math.max(Number(params.flatsPerWing) || 10, 1), 250);
 
       cleanWings.forEach((wing) => {
-        const wingLetter = wing.replace(' Wing', '').trim() || 'A';
-        for (let floor = 1; floor <= Math.ceil(flatsCount / 2); floor++) {
-          for (let f = 1; f <= 2; f++) {
-            if (generatedFlats.length >= cleanWings.length * flatsCount) break;
+        const wingClean = wing.trim();
+        const wingLetter = wingClean.replace(/[\s_-]*(wing|tower)$/i, '').trim() || wingClean;
+        const blockName = wingClean.toLowerCase().includes('wing') || wingClean.toLowerCase().includes('tower')
+          ? wingClean
+          : `${wingClean} Wing`;
+
+        let count = 0;
+        let floor = 1;
+        while (count < flatsCount) {
+          for (let f = 1; f <= 2 && count < flatsCount; f++) {
             const flatNum = `${wingLetter}-${floor}0${f}`;
+            const floorSuffix = floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`;
             generatedFlats.push({
-              id: `flat-${wingLetter.toLowerCase()}-${floor}0${f}-${Date.now().toString(36)}`,
+              id: `flat-${wingLetter.toLowerCase().replace(/[^a-z0-9]/g, '')}-${floor}0${f}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
               society_id: societyId,
               flat_number: flatNum,
-              block: `${wingLetter} Wing`,
-              floor: `${floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`} Floor`,
+              block: blockName,
+              floor: `${floorSuffix} Floor`,
               area: '1,250 sq ft',
               status: generatedFlats.length === 0 ? 'occupied' : 'vacant',
               created_at: new Date().toISOString(),
             });
+            count++;
           }
+          floor++;
         }
       });
 
@@ -418,7 +452,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let finalTotalFlats = generatedFlats.length;
 
       try {
-        const apiRes = await api.auth.registerSociety(params);
+        const apiRes = await api.auth.registerSociety({
+          ...params,
+          flats: generatedFlats,
+        });
         if (apiRes?.token) {
           localStorage.setItem('society_auth_token', apiRes.token);
           localStorage.setItem('jwt_token', apiRes.token);
@@ -701,12 +738,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('society_active_id');
     localStorage.removeItem('society_auth_token');
     localStorage.removeItem('jwt_token');
+    localStorage.setItem('society_view_mode', 'landing');
     removeJwtToken();
     setSession(null);
     setProfile(null);
     setSociety(null);
     setJwtToken(null);
     setDecodedJwt(null);
+    window.dispatchEvent(new Event('society-auth-change'));
+    window.dispatchEvent(new Event('society-data-change'));
   };
 
   const switchDemoRole = (role: Role) => {

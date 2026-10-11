@@ -402,40 +402,67 @@ router.post('/register-society', async (req, res) => {
   const societyCode = `SN-${Math.floor(10000 + Math.random() * 90000)}`;
   const fullAddress = address ? `${address}, ${city}` : city;
   const passwordHash = await bcrypt.hash(adminPassword, 10);
-  const totalTargetFlats = Math.min(Math.max(Number(flatsPerWing || (req.body as any).totalFlats) || 20, 1), 1000);
-
-  // 3. Generate Flats across wings (Exact Total Count)
-  const wingList = Array.isArray(wings) && wings.length > 0 ? wings : ['A Wing', 'B Wing'];
+  // 3. Generate or Adopt Flats across configured wings
   const generatedFlats: any[] = [];
   let firstFlatId: string | null = null;
-  let flatIndex = 0;
 
-  while (generatedFlats.length < totalTargetFlats) {
-    const wingIndex = flatIndex % wingList.length;
-    const wing = wingList[wingIndex];
-    const wingLetter = wing.replace(' Wing', '').trim() || 'A';
-    const flatNumInWing = Math.floor(flatIndex / wingList.length) + 1;
-    const floorNum = Math.ceil(flatNumInWing / 2);
-    const unitInFloor = ((flatNumInWing - 1) % 2) + 1;
-    const flatNum = `${wingLetter}-${floorNum}0${unitInFloor}`;
-    const flatId = genId('flat');
-    if (!firstFlatId) firstFlatId = flatId;
-    const isFirst = generatedFlats.length === 0;
+  if (Array.isArray(req.body.flats) && req.body.flats.length > 0) {
+    for (const f of req.body.flats) {
+      const fId = f.id || genId('flat');
+      if (!firstFlatId) firstFlatId = fId;
+      const flatObj = {
+        id: fId,
+        society_id: societyId,
+        flat_number: f.flat_number,
+        block: f.block || 'A Wing',
+        floor: f.floor || '1st Floor',
+        area: f.area || '1,250 sq ft',
+        status: f.status || (generatedFlats.length === 0 ? 'occupied' : 'vacant'),
+        resident_name: generatedFlats.length === 0 ? adminName : null,
+        created_at: f.created_at || new Date().toISOString(),
+      };
+      generatedFlats.push(flatObj);
+      memoryStore.flats.push(flatObj);
+    }
+  } else {
+    const wingList = Array.isArray(wings) && wings.length > 0 ? wings : ['A Wing', 'B Wing'];
+    const perWingCount = Math.min(Math.max(Number(flatsPerWing) || 10, 1), 250);
 
-    const flatObj = {
-      id: flatId,
-      society_id: societyId,
-      flat_number: flatNum,
-      block: `${wingLetter} Wing`,
-      floor: `Floor ${floorNum}`,
-      area: '1,250 sq ft',
-      status: isFirst ? 'occupied' : 'vacant',
-      resident_name: isFirst ? adminName : null,
-      created_at: new Date().toISOString(),
-    };
-    generatedFlats.push(flatObj);
-    memoryStore.flats.push(flatObj);
-    flatIndex++;
+    for (const wing of wingList) {
+      const wingClean = String(wing).trim();
+      const wingLetter = wingClean.replace(/[\s_-]*(wing|tower)$/i, '').trim() || wingClean;
+      const blockName = wingClean.toLowerCase().includes('wing') || wingClean.toLowerCase().includes('tower')
+        ? wingClean
+        : `${wingClean} Wing`;
+
+      let count = 0;
+      let floor = 1;
+      while (count < perWingCount) {
+        for (let unit = 1; unit <= 2 && count < perWingCount; unit++) {
+          const flatNum = `${wingLetter}-${floor}0${unit}`;
+          const floorSuffix = floor === 1 ? '1st' : floor === 2 ? '2nd' : floor === 3 ? '3rd' : `${floor}th`;
+          const flatId = genId('flat');
+          if (!firstFlatId) firstFlatId = flatId;
+          const isFirst = generatedFlats.length === 0;
+
+          const flatObj = {
+            id: flatId,
+            society_id: societyId,
+            flat_number: flatNum,
+            block: blockName,
+            floor: `${floorSuffix} Floor`,
+            area: '1,250 sq ft',
+            status: isFirst ? 'occupied' : 'vacant',
+            resident_name: isFirst ? adminName : null,
+            created_at: new Date().toISOString(),
+          };
+          generatedFlats.push(flatObj);
+          memoryStore.flats.push(flatObj);
+          count++;
+        }
+        floor++;
+      }
+    }
   }
 
   // 4. Update Memory Store
@@ -487,7 +514,7 @@ router.post('/register-society', async (req, res) => {
 
   saveMemoryStore();
 
-  // 5. Insert into Database (MySQL / SQLite)
+  // 5. Insert into MySQL Relational Database
   try {
     const conn = await pool.getConnection();
     try {
@@ -717,7 +744,7 @@ router.post('/register-resident', async (req, res) => {
 
   saveMemoryStore();
 
-  // 7. Insert into Relational Database (MySQL / SQLite)
+  // 7. Insert into MySQL Relational Database
   try {
     const conn = await pool.getConnection();
     try {
